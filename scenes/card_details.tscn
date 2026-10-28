@@ -1,0 +1,304 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/Cards/CardDetails.cs" id="1_details"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.13, 0.13, 0.16, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.5, 0.05, 0.1, 1)
+content_margin_left = 12.0
+content_margin_top = 12.0
+content_margin_right = 12.0
+content_margin_bottom = 12.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_name"]
+bg_color = Color(0.1, 0.1, 0.12, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85, 0.85, 0.85, 1)
+content_margin_left = 6.0
+content_margin_top = 4.0
+content_margin_right = 6.0
+content_margin_bottom = 4.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_types"]
+bg_color = Color(0.1, 0.1, 0.12, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.95, 0.85, 0.2, 1)
+content_margin_left = 6.0
+content_margin_top = 4.0
+content_margin_right = 6.0
+content_margin_bottom = 4.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_mana"]
+bg_color = Color(0.1, 0.1, 0.12, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.3, 0.35, 0.85, 1)
+content_margin_left = 6.0
+content_margin_top = 4.0
+content_margin_right = 6.0
+content_margin_bottom = 4.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_description"]
+bg_color = Color(0.1, 0.1, 0.12, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.95, 0.5, 0.15, 1)
+content_margin_left = 10.0
+content_margin_top = 8.0
+content_margin_right = 10.0
+content_margin_bottom = 8.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_attack"]
+bg_color = Color(0.8, 0.2, 0.2, 1)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_defense"]
+bg_color = Color(0.25, 0.45, 0.85, 1)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health"]
+bg_color = Color(0.2, 0.65, 0.3, 1)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_block"]
+bg_color = Color(0.5, 0.5, 0.55, 1)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+
+[node name="CardDetails" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_details")
+
+[node name="Dimmer" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.6)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Columns" type="HBoxContainer" parent="Center"]
+layout_mode = 2
+mouse_filter = 0
+theme_override_constants/separation = 24
+
+[node name="LeftPanel" type="PanelContainer" parent="Center/Columns"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Left" type="VBoxContainer" parent="Center/Columns/LeftPanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Image" type="TextureRect" parent="Center/Columns/LeftPanel/Left"]
+custom_minimum_size = Vector2(260, 260)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ManaMark" type="ColorRect" parent="Center/Columns/LeftPanel/Left/Image"]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -40.0
+offset_top = -40.0
+offset_right = 40.0
+offset_bottom = 40.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Divider" type="ColorRect" parent="Center/Columns/LeftPanel/Left"]
+custom_minimum_size = Vector2(0, 3)
+layout_mode = 2
+color = Color(0.95, 0.85, 0.2, 1)
+
+[node name="Stats" type="HBoxContainer" parent="Center/Columns/LeftPanel/Left"]
+layout_mode = 2
+theme_override_constants/separation = 20
+alignment = 1
+
+[node name="Attack" type="Label" parent="Center/Columns/LeftPanel/Left/Stats"]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+tooltip_text = "Атака"
+mouse_filter = 1
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_attack")
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Defense" type="Label" parent="Center/Columns/LeftPanel/Left/Stats"]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+tooltip_text = "Защита"
+mouse_filter = 1
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_defense")
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Health" type="Label" parent="Center/Columns/LeftPanel/Left/Stats"]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+tooltip_text = "Здоровье"
+mouse_filter = 1
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_health")
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Block" type="Label" parent="Center/Columns/LeftPanel/Left/Stats"]
+custom_minimum_size = Vector2(44, 44)
+layout_mode = 2
+tooltip_text = "Блок"
+mouse_filter = 1
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_block")
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="RightPanel" type="PanelContainer" parent="Center/Columns"]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Right" type="VBoxContainer" parent="Center/Columns/RightPanel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="NameBox" type="PanelContainer" parent="Center/Columns/RightPanel/Right"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_name")
+
+[node name="Name" type="Label" parent="Center/Columns/RightPanel/Right/NameBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Название"
+horizontal_alignment = 1
+
+[node name="TypeRow" type="HBoxContainer" parent="Center/Columns/RightPanel/Right"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TypesBox" type="PanelContainer" parent="Center/Columns/RightPanel/Right/TypeRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_types")
+
+[node name="Types" type="Label" parent="Center/Columns/RightPanel/Right/TypeRow/TypesBox"]
+layout_mode = 2
+text = "Типы"
+horizontal_alignment = 1
+
+[node name="ManaBox" type="PanelContainer" parent="Center/Columns/RightPanel/Right/TypeRow"]
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_mana")
+
+[node name="ManaCost" type="Label" parent="Center/Columns/RightPanel/Right/TypeRow/ManaBox"]
+layout_mode = 2
+text = "Мана: 0"
+horizontal_alignment = 1
+
+[node name="DescriptionBox" type="PanelContainer" parent="Center/Columns/RightPanel/Right"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_description")
+
+[node name="DescriptionColumn" type="VBoxContainer" parent="Center/Columns/RightPanel/Right/DescriptionBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="DescriptionTitle" type="Label" parent="Center/Columns/RightPanel/Right/DescriptionBox/DescriptionColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.5, 0.15, 1)
+text = "Описание"
+
+[node name="Description" type="Label" parent="Center/Columns/RightPanel/Right/DescriptionBox/DescriptionColumn"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "Способность 1"
+autowrap_mode = 3
+
+[node name="Activations" type="VBoxContainer" parent="Center/Columns/RightPanel/Right"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Buttons" type="HBoxContainer" parent="Center/Columns/RightPanel/Right"]
+layout_mode = 2
+theme_override_constants/separation = 10
+alignment = 2
+
+[node name="CloseButton" type="Button" parent="Center/Columns/RightPanel/Right/Buttons"]
+layout_mode = 2
+text = "Закрыть"
+
+[node name="GlossaryPanel" type="PanelContainer" parent="Center/Columns"]
+visible = false
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Column" type="VBoxContainer" parent="Center/Columns/GlossaryPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Center/Columns/GlossaryPanel/Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.85, 0.2, 1)
+text = "Пояснения"
+
+[node name="Text" type="Label" parent="Center/Columns/GlossaryPanel/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 3

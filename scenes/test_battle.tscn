@@ -1,0 +1,454 @@
+[gd_scene format=3 uid="uid://10ql8thrjrn0"]
+
+[ext_resource type="Script" path="res://scripts/Battle/TestBattle.cs" id="1_1dg5m"]
+[ext_resource type="PackedScene" path="res://scenes/test_card.tscn" id="2_card"]
+[ext_resource type="PackedScene" path="res://scenes/card_details.tscn" id="3_details"]
+[ext_resource type="Script" path="res://scripts/Battle/ManaPoolView.cs" id="4_pool"]
+[ext_resource type="PackedScene" path="res://scenes/discard_view.tscn" id="5_discard"]
+[ext_resource type="PackedScene" path="res://scenes/draft_view.tscn" id="6_draft"]
+[ext_resource type="PackedScene" path="res://scenes/choice_view.tscn" id="7_choice"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hand"]
+bg_color = Color(0.2, 0.4, 0.85, 0.35)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.3, 0.5, 1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lane_enemy"]
+bg_color = Color(0.75, 0.25, 0.25, 0.35)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.9, 0.3, 0.3, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lane_player"]
+bg_color = Color(0.25, 0.65, 0.3, 0.35)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.3, 0.85, 0.4, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_deck"]
+bg_color = Color(0.85, 0.55, 0.15, 0.8)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.75, 0.3, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_deck_disabled"]
+bg_color = Color(0.85, 0.55, 0.15, 0.3)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.75, 0.3, 0.4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_discard"]
+bg_color = Color(0.45, 0.45, 0.5, 0.8)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.7, 0.7, 0.75, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_discard_disabled"]
+bg_color = Color(0.45, 0.45, 0.5, 0.3)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.7, 0.7, 0.75, 0.4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_mana_pool"]
+bg_color = Color(0.12, 0.12, 0.15, 0.85)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.6, 0.6, 0.65, 1)
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_prompt"]
+bg_color = Color(0.13, 0.13, 0.16, 0.95)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 0.9, 0.2, 1)
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_advantages"]
+bg_color = Color(0.3, 0.25, 0.1, 0.5)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85, 0.7, 0.3, 1)
+content_margin_left = 3.0
+content_margin_top = 2.0
+content_margin_right = 3.0
+content_margin_bottom = 2.0
+
+[node name="TestBattle" type="Control" unique_id=1371412090]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_1dg5m")
+CardScene = ExtResource("2_card")
+
+[node name="EnemyHand" type="PanelContainer" parent="." unique_id=1854861342]
+layout_mode = 0
+offset_left = 244.0
+offset_top = 10.0
+offset_right = 1012.0
+offset_bottom = 120.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_hand")
+
+[node name="Cards" type="HBoxContainer" parent="EnemyHand" unique_id=744537273]
+layout_mode = 2
+alignment = 1
+
+[node name="EnemyAdvantages" type="PanelContainer" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 10.0
+offset_right = 236.0
+offset_bottom = 120.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_advantages")
+
+[node name="Column" type="VBoxContainer" parent="EnemyAdvantages"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="Title" type="Label" parent="EnemyAdvantages/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 10
+text = "Преимущества"
+horizontal_alignment = 1
+
+[node name="Cards" type="HBoxContainer" parent="EnemyAdvantages/Column"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="EnemyManaPool" type="PanelContainer" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 130.0
+offset_right = 120.0
+offset_bottom = 318.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_mana_pool")
+script = ExtResource("4_pool")
+
+[node name="Rows" type="VBoxContainer" parent="EnemyManaPool"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="Title" type="Label" parent="EnemyManaPool/Rows"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Накопитель"
+horizontal_alignment = 1
+
+[node name="PlayerManaPool" type="PanelContainer" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 330.0
+offset_right = 120.0
+offset_bottom = 518.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_mana_pool")
+script = ExtResource("4_pool")
+
+[node name="Rows" type="VBoxContainer" parent="PlayerManaPool"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="Title" type="Label" parent="PlayerManaPool/Rows"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Накопитель"
+horizontal_alignment = 1
+
+[node name="Lanes" type="Control" parent="." unique_id=817220774]
+anchors_preset = 0
+
+[node name="EnemyLane2" type="PanelContainer" parent="Lanes" unique_id=617772228]
+layout_mode = 0
+offset_left = 128.0
+offset_top = 130.0
+offset_right = 1012.0
+offset_bottom = 220.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_lane_enemy")
+
+[node name="Cards" type="HBoxContainer" parent="Lanes/EnemyLane2" unique_id=603975797]
+layout_mode = 2
+alignment = 1
+
+[node name="EnemyLane1" type="PanelContainer" parent="Lanes" unique_id=66039450]
+layout_mode = 0
+offset_left = 128.0
+offset_top = 228.0
+offset_right = 1012.0
+offset_bottom = 318.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_lane_enemy")
+
+[node name="Cards" type="HBoxContainer" parent="Lanes/EnemyLane1" unique_id=1998733344]
+layout_mode = 2
+alignment = 1
+
+[node name="PlayerLane1" type="PanelContainer" parent="Lanes" unique_id=964583937]
+layout_mode = 0
+offset_left = 128.0
+offset_top = 330.0
+offset_right = 1012.0
+offset_bottom = 420.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_lane_player")
+
+[node name="Cards" type="HBoxContainer" parent="Lanes/PlayerLane1" unique_id=880507628]
+layout_mode = 2
+alignment = 1
+
+[node name="PlayerLane2" type="PanelContainer" parent="Lanes" unique_id=1274634573]
+layout_mode = 0
+offset_left = 128.0
+offset_top = 428.0
+offset_right = 1012.0
+offset_bottom = 518.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_lane_player")
+
+[node name="Cards" type="HBoxContainer" parent="Lanes/PlayerLane2" unique_id=1631127548]
+layout_mode = 2
+alignment = 1
+
+[node name="PlayerHand" type="PanelContainer" parent="." unique_id=53077168]
+layout_mode = 0
+offset_left = 244.0
+offset_top = 528.0
+offset_right = 1012.0
+offset_bottom = 638.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_hand")
+
+[node name="Cards" type="HBoxContainer" parent="PlayerHand" unique_id=1782807487]
+layout_mode = 2
+alignment = 1
+
+[node name="PlayerAdvantages" type="PanelContainer" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 528.0
+offset_right = 236.0
+offset_bottom = 638.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_advantages")
+
+[node name="Column" type="VBoxContainer" parent="PlayerAdvantages"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="Title" type="Label" parent="PlayerAdvantages/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 10
+text = "Преимущества"
+horizontal_alignment = 1
+
+[node name="Cards" type="HBoxContainer" parent="PlayerAdvantages/Column"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="EnemyDeck" type="Button" parent="." unique_id=1276882325]
+layout_mode = 0
+offset_left = 1032.0
+offset_top = 10.0
+offset_right = 1132.0
+offset_bottom = 120.0
+theme_override_styles/normal = SubResource("StyleBoxFlat_deck")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_deck")
+theme_override_styles/hover = SubResource("StyleBoxFlat_deck")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_deck_disabled")
+text = "Колода"
+
+[node name="EnemyDiscard" type="Button" parent="." unique_id=620931550]
+layout_mode = 0
+offset_left = 1032.0
+offset_top = 128.0
+offset_right = 1132.0
+offset_bottom = 238.0
+theme_override_styles/normal = SubResource("StyleBoxFlat_discard")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_discard")
+theme_override_styles/hover = SubResource("StyleBoxFlat_discard")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_discard_disabled")
+text = "Сброс"
+
+[node name="NextPhaseButton" type="Button" parent="." unique_id=1500000001]
+layout_mode = 0
+offset_left = 1032.0
+offset_top = 248.0
+offset_right = 1132.0
+offset_bottom = 278.0
+theme_override_font_sizes/font_size = 13
+text = "Далее"
+
+[node name="TurnLabel" type="Label" parent="." unique_id=1500000002]
+layout_mode = 0
+offset_left = 1022.0
+offset_top = 282.0
+offset_right = 1142.0
+offset_bottom = 336.0
+theme_override_font_sizes/font_size = 12
+text = "Ход: Игрок 1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HintLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 1022.0
+offset_top = 338.0
+offset_right = 1142.0
+offset_bottom = 396.0
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+theme_override_font_sizes/font_size = 11
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="PlayerDiscard" type="Button" parent="." unique_id=125224018]
+layout_mode = 0
+offset_left = 1032.0
+offset_top = 400.0
+offset_right = 1132.0
+offset_bottom = 510.0
+theme_override_styles/normal = SubResource("StyleBoxFlat_discard")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_discard")
+theme_override_styles/hover = SubResource("StyleBoxFlat_discard")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_discard_disabled")
+text = "Сброс"
+
+[node name="PlayerDeck" type="Button" parent="." unique_id=1250134061]
+layout_mode = 0
+offset_left = 1032.0
+offset_top = 528.0
+offset_right = 1132.0
+offset_bottom = 638.0
+theme_override_styles/normal = SubResource("StyleBoxFlat_deck")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_deck")
+theme_override_styles/hover = SubResource("StyleBoxFlat_deck")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_deck_disabled")
+text = "Колода"
+
+[node name="PaymentPrompt" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 244.0
+offset_top = 10.0
+offset_right = 1012.0
+offset_bottom = 120.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_prompt")
+
+[node name="Row" type="HBoxContainer" parent="PaymentPrompt"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Slot" type="CenterContainer" parent="PaymentPrompt/Row"]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+
+[node name="Column" type="VBoxContainer" parent="PaymentPrompt/Row"]
+custom_minimum_size = Vector2(560, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="Text" type="Label" parent="PaymentPrompt/Row/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+text = "Выберите ману в накопителе"
+
+[node name="Buttons" type="HBoxContainer" parent="PaymentPrompt/Row/Column"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="DoneButton" type="Button" parent="PaymentPrompt/Row/Column/Buttons"]
+visible = false
+layout_mode = 2
+text = "Готово"
+
+[node name="CancelButton" type="Button" parent="PaymentPrompt/Row/Column/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 0
+text = "Вернуть в руку"
+
+[node name="DiscardView" parent="." instance=ExtResource("5_discard")]
+visible = false
+layout_mode = 1
+
+[node name="DraftView" parent="." instance=ExtResource("6_draft")]
+visible = false
+layout_mode = 1
+
+[node name="ChoiceView" parent="." instance=ExtResource("7_choice")]
+visible = false
+layout_mode = 1
+
+[node name="GameOver" type="Control" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dimmer" type="ColorRect" parent="GameOver"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.75)
+
+[node name="Center" type="CenterContainer" parent="GameOver"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Column" type="VBoxContainer" parent="GameOver/Center"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Text" type="Label" parent="GameOver/Center/Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.85, 0.2, 1)
+theme_override_font_sizes/font_size = 36
+text = "Победа"
+horizontal_alignment = 1
+
+[node name="Reason" type="Label" parent="GameOver/Center/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+
+[node name="RestartButton" type="Button" parent="GameOver/Center/Column"]
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Новая игра"
+
+[node name="CardDetails" parent="." unique_id=1500000003 instance=ExtResource("3_details")]
+layout_mode = 1
