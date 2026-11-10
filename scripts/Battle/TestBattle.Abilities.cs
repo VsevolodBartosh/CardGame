@@ -25,7 +25,9 @@ public partial class TestBattle
 		_gameOver = GetNode<Control>("GameOver");
 		_gameOverText = GetNode<Label>("GameOver/Center/Column/Text");
 		_gameOverReason = GetNode<Label>("GameOver/Center/Column/Reason");
-		GetNode<Button>("GameOver/Center/Column/RestartButton").Pressed += () => GetTree().ReloadCurrentScene();
+		var restart = GetNode<Button>("GameOver/Center/Column/RestartButton");
+		restart.Text = GameSession.Online ? "В главное меню" : "Новая игра";
+		restart.Pressed += OnRestartPressed;
 		ReadyDraftUi();
 	}
 
@@ -67,11 +69,12 @@ public partial class TestBattle
 		ShotInfo shot = AbilitiesData.Get(abilityId).Shot;
 		shooter.UseAmmo(abilityId);
 		ApplyDamage(target, AfterBlock(shot.Damage, target), shooter);
+
+		// Огненный Элементаль обжигается собственным выстрелом.
+		if (shot.SelfDamage > 0)
+			ApplyDamage(shooter, shot.SelfDamage, null);
 	}
 
-	/// <summary>Спросить игрока и дождаться ответа (номер варианта).</summary>
-	public Task<int> ChooseAsync(PlayerState player, string title, IReadOnlyList<string> options) =>
-		_choiceView.Ask($"{player.Name}: {title}", options);
 
 	/// <summary>
 	/// Вызывать в конце эффекта, который ждал ответа игрока (await): эффект доиграл позже
@@ -101,7 +104,7 @@ public partial class TestBattle
 	{
 		List<Card> hand = player.Hand.GetChildren().OfType<Card>().ToList();
 		if (hand.Count > 0)
-			SendToDiscard(hand[Random.Shared.Next(hand.Count)]);
+			SendToDiscard(hand[_rng.Next(hand.Count)]);
 	}
 
 	public void Immobilize(Card target, PlayerState by) => target.SetImmobilized(by);
@@ -113,13 +116,15 @@ public partial class TestBattle
 	/// <summary>Карта в игре: на линии или в преимуществах.</summary>
 	private bool IsInPlay(Card card) => LaneOf(card) != null || card.GetParent() == card.Player?.Advantages;
 
-	private IEnumerable<AbilityData> ActivatableAbilities(Card card) => card.Abilities.Where(a => CanActivate(card, a));
+	private IEnumerable<AbilityData> ActivatableAbilities(Card card, bool fromDiscard = false) =>
+		card.Abilities.Where(a => CanActivate(card, a, fromDiscard));
 
 	/// <summary>
 	/// Можно ли сейчас активировать способность. Активирует всегда тот, кто действует в фазе:
-	/// свою карту в игре или, при контроле над сбросами, карту из открытого сброса.
+	/// свою карту в игре или, при контроле над сбросами, карту из сброса (fromDiscard = true).
+	/// Для карты из сброса card.Player — хозяин сброса.
 	/// </summary>
-	private bool CanActivate(Card card, AbilityData ability)
+	private bool CanActivate(Card card, AbilityData ability, bool fromDiscard = false)
 	{
 		// Оглушённое существо не может использовать способности.
 		if (ability.OnActivated == null || IsBusy || card.IsStunned)
@@ -130,8 +135,14 @@ public partial class TestBattle
 
 		if (inPlay && card.Player != player)
 			return false;
-		if (!inPlay && !(ability.UsableFromDiscard && player.ControlsAllDiscards && _viewedDiscardOwner != null))
-			return false;
+		if (!inPlay)
+		{
+			// Из сброса: из любого при контроле над сбросами (Барон) или из своего — для особых способностей (Тень).
+			bool fromAnyDiscard = fromDiscard && ability.UsableFromDiscard && player.ControlsAllDiscards;
+			bool fromOwnDiscard = fromDiscard && ability.UsableFromOwnDiscard && card.Player == player;
+			if (!fromAnyDiscard && !fromOwnDiscard)
+				return false;
+		}
 
 		// Поворот и «соседняя линия» требуют, чтобы карта стояла на поле.
 		if (ability.ActivationTapsSelf && (!inPlay || card.IsTapped))
@@ -143,32 +154,36 @@ public partial class TestBattle
 		return ability.ActivationCondition?.Invoke(Context(card, player, null)) ?? true;
 	}
 
-	private void OnActivateRequested(Card card, string abilityId)
+	/// <summary>
+	/// Активировать способность (у обоих игроков, по команде).
+	/// fromDiscard — card это отдельная копия карты из сброса (её создала команда), она живёт до конца оплаты.
+	/// </summary>
+	private void OnActivateRequested(Card card, string abilityId, bool fromDiscard)
 	{
 		AbilityData ability = AbilitiesData.Get(abilityId);
-		if (!CanActivate(card, ability))
-			return;
-
-		// Карта из сброса показана в окне, которое скоро закроется и удалит её.
-		// Поэтому делаем отдельную копию, она живёт до конца оплаты.
-		Card source = card;
-		bool temp = !IsInPlay(card);
-		if (temp)
+		if (!CanActivate(card, ability, fromDiscard))
 		{
-			source = CardScene.Instantiate<Card>();
-			source.Setup(card.Data.Id);
-			source.Player = card.Player;
-			_discardView.Close();
+			if (fromDiscard)
+				card.Free();
+			return;
 		}
 
+		Card source = card;
+		bool temp = fromDiscard;
+		if (temp)
+			_discardView.Close();
+
+		// Стопка активирует способность всеми картами, которые могут.
 		PlayerState player = ActingPlayer;
+		List<Card> sources = temp ? [source] : StackOf(card).Where(c => CanActivate(c, ability)).ToList();
+
 		if (ability.ActivationTarget == ActivationTarget.None)
 		{
-			PayForActivation(source, ability, player, null, null, temp);
+			PayForActivation(sources, ability, player, null, null, temp);
 		}
 		else
 		{
-			_targeting = new Targeting(source, ability, player, temp);
+			_targeting = new Targeting(source, sources, ability, player, temp);
 			ShowHint($"«{ability.Name}»: {TargetPrompt(ability.ActivationTarget)}\nОтмена: клик по карте ещё раз или Esc.");
 		}
 
@@ -181,19 +196,41 @@ public partial class TestBattle
 		ActivationTarget.AnyNonHeroCreature => "кликните по существу (не герою).",
 		ActivationTarget.AdjacentCreature => "кликните по существу на соседней линии.",
 		ActivationTarget.ShotTarget => "кликните по вражескому существу в пределах дистанции.",
+		ActivationTarget.AnyCreature => "кликните по существу.",
+		ActivationTarget.FriendlyCreature => "кликните по своему существу.",
 		_ => "",
 	};
 
-	private void PayForActivation(Card source, AbilityData ability, PlayerState player, Card target, Lane lane, bool temp)
+	/// <summary>
+	/// Оплатить и выполнить способность. sources — все карты стопки, которые её активируют.
+	/// Цена умножается на число карт; если маны хватает не на всех, способность активирует
+	/// наибольшее число карт, на которое хватает.
+	/// </summary>
+	private void PayForActivation(List<Card> sources, AbilityData ability, PlayerState player, Card target, Lane lane, bool temp,
+		ManaCost[] extraCost = null)
 	{
-		StartPayment(source, player, ability.ActivationCost, ability.ActivationLaborCost, fromHand: false, tempSource: temp,
+		// extraCost — доплата сверх обычной цены (выстрел Серого провидца дальше дистанции).
+		ManaCost[] cost = [.. ability.ActivationCost, .. extraCost ?? []];
+
+		int count = sources.Count;
+		while (count > 1 && !ManaPayment.CanPay(ManaPayment.ToUnits(Repeat(cost, count)), player.Mana))
+			count--;
+
+		List<Card> active = sources.Take(count).ToList();
+		StartPayment(active[0], player, Repeat(cost, count), ability.ActivationLaborCost * count,
+			fromHand: false, tempSource: temp,
 			onComplete: () =>
 			{
-				if (ability.ActivationTapsSelf)
-					source.SetTapped(true);
-				ability.OnActivated(Context(source, player, target, lane));
+				foreach (Card source in active)
+				{
+					if (ability.ActivationTapsSelf)
+						source.SetTapped(true);
+					ability.OnActivated(Context(source, player, target, lane));
+				}
 			});
 	}
+
+	private static ManaCost[] Repeat(ManaCost[] cost, int times) => Enumerable.Repeat(cost, times).SelectMany(c => c).ToArray();
 
 	// ───────────── Выбор цели ─────────────
 
@@ -208,11 +245,6 @@ public partial class TestBattle
 		TryChooseTarget(LaneOf(card), card.IsCreature ? card : null);
 	}
 
-	private void OnLaneGuiInput(Lane lane, InputEvent @event)
-	{
-		if (_targeting != null && @event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true })
-			TryChooseTarget(lane, null);
-	}
 
 	private void TryChooseTarget(Lane lane, Card creature)
 	{
@@ -222,7 +254,7 @@ public partial class TestBattle
 
 		_targeting = null;
 		ShowHint("");
-		PayForActivation(t.Source, t.Ability, t.Player, creature, lane, t.TempSource);
+		PayForActivation(t.Sources, t.Ability, t.Player, creature, lane, t.TempSource, ShotExtraCost(t, lane));
 		RefreshView();
 	}
 
@@ -233,9 +265,22 @@ public partial class TestBattle
 		ActivationTarget.AdjacentCreature => creature != null && LaneOf(t.Source).IsAdjacentTo(lane),
 		ActivationTarget.ShotTarget => creature != null
 			&& creature.Player != t.Source.Player
-			&& Math.Abs(LaneOf(t.Source).Row - lane.Row) <= t.Ability.Shot.Distance,
+			&& (Math.Abs(LaneOf(t.Source).Row - lane.Row) <= t.Ability.Shot.Distance || t.Ability.Shot.ExtraCostPerLine.Length > 0),
+		ActivationTarget.AnyCreature => creature != null,
+		ActivationTarget.FriendlyCreature => creature != null && creature.Player == t.Player,
 		_ => false,
 	};
+
+	/// <summary>Доплата за выстрел дальше дистанции: цена за линию × сколько линий сверх дистанции.</summary>
+	private ManaCost[] ShotExtraCost(Targeting t, Lane lane)
+	{
+		ShotInfo shot = t.Ability.Shot;
+		if (shot == null || shot.ExtraCostPerLine.Length == 0)
+			return [];
+
+		int extraLines = Math.Max(0, Math.Abs(LaneOf(t.Source).Row - lane.Row) - shot.Distance);
+		return Repeat(shot.ExtraCostPerLine, extraLines);
+	}
 
 	private void CancelTargeting()
 	{
@@ -253,7 +298,8 @@ public partial class TestBattle
 	private void OnViewedCardClicked(Card card)
 	{
 		// Способности из сброса — только пока открыт сброс, не колода.
-		_cardDetails.Open(card, _viewedDiscardOwner != null ? ActivatableAbilities(card) : null);
+		bool canActivate = _viewedDiscardOwner != null && IsLocal(ActingPlayer);
+		_cardDetails.Open(card, canActivate ? ActivatableAbilities(card, fromDiscard: true) : null);
 	}
 
 	/// <summary>Сброс под контролем игрока: свой всегда, чужой — пока действует «Хозяин кладбища».</summary>
@@ -270,14 +316,14 @@ public partial class TestBattle
 			&& AllCreatures.Any(c => c.Player == player && c.HasAny(a => a.DrawFromDiscard));
 	}
 
-	private void OnTakeRandomFromDiscard()
+	/// <summary>Взять случайную карту из сброса owner вместо добора (у обоих игроков, по команде).</summary>
+	private void OnTakeRandomFromDiscard(PlayerState owner)
 	{
-		PlayerState owner = _viewedDiscardOwner;
 		if (owner == null || !CanTakeRandomFrom(owner))
 			return;
 
 		PlayerState player = ActingPlayer;
-		int index = Random.Shared.Next(owner.Discard.Count);
+		int index = _rng.Next(owner.Discard.Count);
 		string id = owner.Discard[index];
 		owner.Discard.RemoveAt(index);
 
@@ -333,9 +379,12 @@ public partial class TestBattle
 	}
 
 	/// <summary>Способность ждёт, пока игрок кликнет по цели.</summary>
-	private sealed class Targeting(Card source, AbilityData ability, PlayerState player, bool tempSource)
+	private sealed class Targeting(Card source, List<Card> sources, AbilityData ability, PlayerState player, bool tempSource)
 	{
 		public Card Source { get; } = source;
+
+		/// <summary>Все карты стопки, которые активируют способность (Source среди них).</summary>
+		public List<Card> Sources { get; } = sources;
 		public AbilityData Ability { get; } = ability;
 		public PlayerState Player { get; } = player;
 

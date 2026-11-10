@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Threading.Tasks;
 using Godot;
 
@@ -65,7 +65,7 @@ public partial class ChoiceView : Control
 		Question answered = _current;
 		_current = null;
 		ShowNext();
-		answered.Result.SetResult(index);
+		TaskHelpers.CompleteInline(answered.Result, index);
 	}
 
 	private sealed record Question(string Title, IReadOnlyList<string> Options, TaskCompletionSource<int> Result);

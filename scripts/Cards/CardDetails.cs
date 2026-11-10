@@ -73,9 +73,9 @@ public partial class CardDetails : Control
 
         _stats.Visible = card.IsCreature;
         _attack.Text = card.Attack.ToString();
-        _defense.Text = data.Defense.ToString();
+        _defense.Text = card.Defense.ToString();
         _health.Text = card.CurrentHealth.ToString();
-        _block.Text = data.Block.ToString();
+        _block.Text = card.Block.ToString();
 
         _name.Text = data.Name;
         _types.Text = TypesText(data);
@@ -88,8 +88,22 @@ public partial class CardDetails : Control
             _description.Text += "\n\n(Карта повёрнута.)";
         if (card.IsImmobilized)
             _description.Text += "\n(Существо обездвижено.)";
+        if (card.IsPoisoned)
+            _description.Text += "\n(Отравлено.)";
+        if (card.TempAttack > 0)
+            _description.Text += $"\n(Атака +{card.TempAttack} до конца хода.)";
+        if (card.LaborCount > 0)
+            _description.Text += $"\n(Трудилось раз: {card.LaborCount}.)";
         if (card.IsStunned)
             _description.Text += $"\n(Оглушено: пропустит разворот ещё {card.StunTurns} раз.)";
+        if (card.StackMembers.Count > 0)
+            _description.Text += $"\n(Стопка: {card.StackMembers.Count + 1} карт. Двойной клик — разложить.)";
+        if (card.StoredCards.Count > 0)
+            _description.Text += $"\n(На карте лежит существ: {card.StoredCards.Count}.)";
+        if (card.CostDiscount > 0)
+            _description.Text += $"\n(Цена уменьшена на {card.CostDiscount}.)";
+        if (card.Player != null && card.OwnerPlayer != null && card.Player != card.OwnerPlayer)
+            _description.Text += $"\n(До конца хода под контролем: {card.Player.Name}.)";
         if (card.ChosenMana is { } chosen)
             _description.Text += $"\n(Выбран тип маны: {chosen.ToRussian()}.)";
 

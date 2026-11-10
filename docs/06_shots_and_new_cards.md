@@ -74,9 +74,9 @@ Shot("ability_shot_x", damage: 2, distance: 0, cost: [new ManaCost(1, ManaType.F
 ```csharp
 OnHostUntapped = async ctx =>
 {
-    int choice = await ctx.Battle.ChooseAsync(owner, "Что получить?", ["2 тьмы", "2 света"]);
-    ...
-    ctx.Battle.AfterAsyncEffect(); // эффект доиграл позже обычного — обновить экран и убрать погибших
+	int choice = await ctx.Battle.ChooseAsync(owner, "Что получить?", ["2 тьмы", "2 света"]);
+	...
+	ctx.Battle.AfterAsyncEffect(); // эффект доиграл позже обычного — обновить экран и убрать погибших
 },
 ```
 

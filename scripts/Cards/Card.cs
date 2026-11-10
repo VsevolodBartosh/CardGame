@@ -25,11 +25,21 @@ public partial class Card : Control
 	[Signal]
 	public delegate void AttachmentClickedEventHandler(Card attachment);
 
-	/// <summary>Клик правой кнопкой: в драфте открывает подробности.</summary>
+	/// <summary>Двойной клик: складывает или раскладывает стопку.</summary>
+	[Signal]
+	public delegate void DoubleClickedEventHandler(Card card);
+
+	/// <summary>Клик правой кнопкой или зажатие (на телефоне): открыть подробности.</summary>
 	[Signal]
 	public delegate void RightClickedEventHandler(Card card);
 
 	public CardData Data { get; private set; }
+
+	/// <summary>Номер карты в бою, одинаковый у обоих игроков в онлайне. 0 — карта не из боя (окна драфта, сброса).</summary>
+	public int NetId { get; set; }
+
+	/// <summary>Сколько держать палец (или кнопку мыши), чтобы это считалось зажатием.</summary>
+	public const double LongPressSeconds = 0.5;
 	public IReadOnlyList<AbilityData> Abilities { get; private set; } = [];
 	public bool IsFaceDown { get; private set; }
 
@@ -58,10 +68,123 @@ public partial class Card : Control
 	/// <summary>Чары и снаряжение, прикреплённые к этому существу.</summary>
 	public IReadOnlyList<Card> Attachments => _attachments;
 
-	/// <summary>Атака с учётом прибавок от прикреплённых карт.</summary>
-	public int Attack => Data.Attack + _attachments.SelectMany(a => a.Abilities).Sum(a => a.AttackBonus);
+	/// <summary>Атака с учётом прикреплённых карт, постоянных, временных и «живых» бонусов.</summary>
+	public int Attack => Data.Attack + BonusAttack + TempAttack + Dynamic.Attack
+		+ _attachments.SelectMany(a => a.Abilities).Sum(a => a.AttackBonus);
 
-	public int Block => Data.Block;
+	public int Defense => Data.Defense + BonusDefense + Dynamic.Defense;
+
+	public int Block => Data.Block + Dynamic.Block;
+
+	/// <summary>Бонусы, которые зависят от обстановки (Фанатики: вера в накопителе). Считаются заново при каждом обращении.</summary>
+	private StatBonus Dynamic => Abilities
+		.Where(a => a.DynamicBonus != null)
+		.Select(a => a.DynamicBonus(this))
+		.Aggregate(new StatBonus(0, 0, 0), (sum, b) => new StatBonus(sum.Attack + b.Attack, sum.Defense + b.Defense, sum.Block + b.Block));
+
+	/// <summary>Прибавка к атаке до конца хода (Теневая тварь, Серый провидец).</summary>
+	public int TempAttack { get; private set; }
+
+	public void AddTempAttack(int amount)
+	{
+		TempAttack += amount;
+		Refresh();
+	}
+
+	public void ClearTempBonuses()
+	{
+		TempAttack = 0;
+		Refresh();
+	}
+
+	/// <summary>Отравление: в трофеи владельца получает 1 урон.</summary>
+	public bool IsPoisoned { get; private set; }
+
+	public void SetPoisoned(bool poisoned)
+	{
+		IsPoisoned = poisoned;
+		Refresh();
+	}
+
+	/// <summary>Сколько раз существо поворачивали, чтобы оплатить труд.</summary>
+	public int LaborCount { get; set; }
+
+	/// <summary>Чем заплатили за карту при розыгрыше (Теневая тварь проверяет, была ли тьма).</summary>
+	public IReadOnlyList<ManaType> LastPaidMana { get; set; } = [];
+
+	/// <summary>Перерисовать карту: например, когда изменилась вера и у Фанатиков поменялись характеристики.</summary>
+	public void Redraw() => Refresh();
+
+	/// <summary>Наибольшее здоровье: начальное плюс постоянный бонус. Лечение выше не поднимает.</summary>
+	public int MaxHealth => Data.Health + BonusHealth;
+
+	/// <summary>Постоянные бонусы «до конца матча» (чары Легиона).</summary>
+	public int BonusAttack { get; private set; }
+	public int BonusDefense { get; private set; }
+	public int BonusHealth { get; private set; }
+
+	public void AddBonus(int attack, int defense, int health)
+	{
+		BonusAttack += attack;
+		BonusDefense += defense;
+		BonusHealth += health;
+		CurrentHealth += health;
+		Refresh();
+	}
+
+	public void Heal(int amount)
+	{
+		CurrentHealth = Math.Min(MaxHealth, CurrentHealth + amount);
+		Refresh();
+	}
+
+	/// <summary>
+	/// Хозяин карты: в чей сброс она уйдёт. Player — кто её сейчас контролирует;
+	/// обычно это один и тот же игрок, но контроль можно временно отнять (чары Легиона).
+	/// </summary>
+	public PlayerState OwnerPlayer { get; set; }
+
+	/// <summary>Номер фазы, в которую карта вышла на поле (для «Гадства»).</summary>
+	public int PlayedPhase { get; set; } = -1;
+
+	/// <summary>Карты, лежащие «на» этой карте (Кладбище).</summary>
+	public List<string> StoredCards { get; } = [];
+
+	/// <summary>Скидка на цену этой карты в руке (Необыкновенное животное).</summary>
+	public int CostDiscount { get; set; }
+
+	// ───────── Стопка ─────────
+
+	/// <summary>
+	/// Игрок разложил стопку двойным кликом: эта карта не складывается сама,
+	/// пока снова не дважды кликнуть.
+	/// </summary>
+	public bool NoStack { get; set; }
+
+	/// <summary>Верхняя карта стопки, если эта карта спрятана в стопке. null — карта сама по себе или верхняя.</summary>
+	public Card StackLeader { get; private set; }
+
+	/// <summary>Остальные карты стопки (у верхней карты). Пусто — стопки нет.</summary>
+	public List<Card> StackMembers { get; } = [];
+
+	/// <summary>Верхняя карта и все спрятанные под ней.</summary>
+	public IEnumerable<Card> WholeStack => StackMembers.Prepend(this);
+
+	public void ClearStack()
+	{
+		StackLeader = null;
+		StackMembers.Clear();
+		Visible = true;
+		Refresh();
+	}
+
+	public void AddToStack(Card member)
+	{
+		StackMembers.Add(member);
+		member.StackLeader = this;
+		member.Visible = false;
+		Refresh();
+	}
 
 	public bool IsHero => Data.IsHero;
 
@@ -247,24 +370,73 @@ public partial class Card : Control
 		if (@event is not InputEventMouseButton { ButtonIndex: MouseButton.Left } mouse)
 			return;
 
-		if (mouse.Pressed)
+		if (mouse.Pressed && mouse.DoubleClick && DelayClicks)
+		{
+			// Второе нажатие двойного клика: отменяем отложенный одиночный клик.
+			_clickToken++;
+			_pressed = false;
+			EmitSignal(SignalName.DoubleClicked, this);
+		}
+		else if (mouse.Pressed)
 		{
 			_pressed = true;
+			WaitLongPress();
 		}
 		else if (_pressed && new Rect2(Vector2.Zero, Size).HasPoint(mouse.Position))
 		{
 			_pressed = false;
-			EmitSignal(SignalName.Clicked, this);
+			_longPressToken++;
+			if (DelayClicks)
+				EmitClickLater();
+			else
+				EmitSignal(SignalName.Clicked, this);
 		}
 
 		AcceptEvent();
+	}
+
+	/// <summary>
+	/// true — одиночный клик срабатывает с задержкой, чтобы успел прийти двойной (карты на поле).
+	/// В окнах драфта и сброса двойной клик не нужен, там клик мгновенный.
+	/// </summary>
+	public bool DelayClicks { get; set; }
+
+	// Номер последнего клика: если пришёл двойной клик, номер меняется и отложенный клик не срабатывает.
+	private int _clickToken;
+
+	private async void EmitClickLater()
+	{
+		int token = ++_clickToken;
+		await ToSignal(GetTree().CreateTimer(DoubleClickSeconds), SceneTreeTimer.SignalName.Timeout);
+		if (token == _clickToken && IsInstanceValid(this))
+			EmitSignal(SignalName.Clicked, this);
+	}
+
+	private const double DoubleClickSeconds = 0.3;
+
+	// Номер нажатия: отпустили или начали тащить — номер меняется, и зажатие не срабатывает.
+	private int _longPressToken;
+
+	// Палец держат на карте LongPressSeconds и не тащат — это зажатие (замена правой кнопки на телефоне).
+	private async void WaitLongPress()
+	{
+		int token = ++_longPressToken;
+		await ToSignal(GetTree().CreateTimer(LongPressSeconds), SceneTreeTimer.SignalName.Timeout);
+		if (token != _longPressToken || !_pressed || !IsInstanceValid(this))
+			return;
+
+		_pressed = false; // Отпускание после зажатия — уже не клик.
+		EmitSignal(SignalName.RightClicked, this);
 	}
 
 	public override void _Notification(int what)
 	{
 		// Godot сообщает всем узлам о начале перетаскивания: это уже не клик.
 		if (what == NotificationDragBegin)
+		{
 			_pressed = false;
+			_longPressToken++;
+		}
 
 		// Карту удаляют. Прикреплённые карты не в дереве сцены, Godot сам их не удалит.
 		if (what == NotificationPredelete)
@@ -314,13 +486,19 @@ public partial class Card : Control
 			badges.Add("Обезд.");
 		if (IsStunned)
 			badges.Add("Оглуш.");
+		if (IsPoisoned)
+			badges.Add("Отрав.");
+		if (StackMembers.Count > 0)
+			badges.Add($"×{StackMembers.Count + 1}");
+		if (StoredCards.Count > 0)
+			badges.Add($"[{StoredCards.Count}]");
 		_badge.Visible = badges.Count > 0;
 		_badge.Text = string.Join(" ", badges);
 
 		_attack.Text = Attack.ToString();
-		_defense.Text = Data.Defense.ToString();
+		_defense.Text = Defense.ToString();
 		_health.Text = CurrentHealth.ToString();
-		_block.Text = Data.Block.ToString();
+		_block.Text = Block.ToString();
 
 		UpdateChips();
 	}

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -6,13 +6,16 @@ using System.Threading.Tasks;
 namespace CardGame;
 
 /// <summary>
-/// Часть TestBattle: начало игры. Драфт героев, выбор героя на поле, два круга драфта карт,
+/// Часть TestBattle: начало игры. Драфт героев, выбор героя на поле, восемь кругов драфта карт,
 /// потом в колоды добавляются оплаты и игроки берут стартовую руку.
 /// </summary>
 public partial class TestBattle
 {
 	/// <summary>Сколько карт открывается в каждом круге драфта.</summary>
 	private const int DraftRoundSize = 5;
+
+	/// <summary>Сколько кругов драфта: 8 × 5 = 40 карт, по 20 каждому игроку.</summary>
+	private const int DraftRounds = 8;
 
 	private DraftView _draftView;
 
@@ -43,17 +46,21 @@ public partial class TestBattle
 		string firstOnField = (await Pick(first, "какого героя выставить на поле?", firstHeroes, 1))[0];
 		string secondOnField = (await Pick(second, "какого героя выставить на поле?", secondHeroes, 1))[0];
 
-		// 3. Два круга драфта. Каждая карта существует в одном экземпляре на обе колоды,
+		// 3. Круги драфта. Каждая карта существует в одном экземпляре на обе колоды,
 		//    поэтому открытые карты сразу убираются из пула.
-		string[] shuffled = CardsData.All.Where(c => !c.IsPayment && !c.IsHero).Select(c => c.Id).ToArray();
-		if (shuffled.Length < DraftRoundSize * 2)
-			throw new InvalidOperationException($"Для драфта нужно минимум {DraftRoundSize * 2} карт, сейчас {shuffled.Length}.");
-		Random.Shared.Shuffle(shuffled);
+		string[] shuffled = CardsData.All.Where(c => !c.IsPayment && !c.IsHero && c.InDraft).Select(c => c.Id).ToArray();
+		if (shuffled.Length < DraftRoundSize * DraftRounds)
+			throw new InvalidOperationException($"Для драфта нужно минимум {DraftRoundSize * DraftRounds} карт, сейчас {shuffled.Length}.");
+		_rng.Shuffle(shuffled);
 		var pool = new Queue<string>(shuffled);
 
+		// Первым выбирают по очереди: в нечётных кругах Игрок 2, в чётных Игрок 1.
 		var picks = new Dictionary<PlayerState, List<string>> { [first] = [], [second] = [] };
-		await DraftRound(pool, picks, opener: second, other: first, round: 1);
-		await DraftRound(pool, picks, opener: first, other: second, round: 2);
+		for (int round = 1; round <= DraftRounds; round++)
+		{
+			PlayerState opener = round % 2 == 1 ? second : first;
+			await DraftRound(pool, picks, opener, OpponentOf(opener), round);
+		}
 
 		// 4. Колоды: выбранные карты + герой не на поле + оплаты.
 		//    Цена героя на поле на оплаты не влияет: его нет в колоде.
@@ -97,5 +104,5 @@ public partial class TestBattle
 	}
 
 	private Task<List<string>> Pick(PlayerState player, string text, IEnumerable<string> ids, int count) =>
-		_draftView.Pick($"{player.Name}: {text}", ids, count, CardScene);
+		PickAsync(player, text, ids, count, count);
 }

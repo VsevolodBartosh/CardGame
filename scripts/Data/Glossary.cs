@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace CardGame;
 
@@ -18,6 +18,8 @@ public static class Glossary
 	public const string Stun = "Оглушение";
 	public const string AnyMana = "Любая";
 	public const string ElementalMana = "Элементальная";
+	public const string Hunger = "Голод";
+	public const string Poison = "Отравление";
 
 	public static readonly IReadOnlyDictionary<string, string> Terms = new Dictionary<string, string>
 	{
@@ -39,5 +41,8 @@ public static class Glossary
 			+ "Каждую единицу можно оплатить своим типом.",
 		[ElementalMana] = "Мана любого элементального типа: огонь, вода, свет, тьма или трава "
 			+ "(все основные, кроме еды и золота). Каждую единицу можно оплатить своим типом.",
+		[Hunger] = "Чтобы закончить фазу трофеев, заплатите одно на выбор: 1 здоровье этой карты, 1 еду или изгоните 1 существо "
+			+ "из любого сброса. Голод не срабатывает, если в этом ходу умерло существо у любого из игроков.",
+		[Poison] = "Статус: в фазу трофеев владельца существо получает 1 урон.",
 	};
 }

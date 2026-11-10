@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace CardGame;
 
@@ -39,7 +39,18 @@ public sealed class ShotInfo
 
 	/// <summary>Сколько всего выстрелов у существа. null — бесконечно.</summary>
 	public int? Ammo { get; init; }
+
+	/// <summary>Сколько урона стрелок получает сам после выстрела (Огненный Элементаль).</summary>
+	public int SelfDamage { get; init; }
+
+	/// <summary>
+	/// Доплата за каждую линию сверх дистанции (Серый провидец). Пусто — дальше дистанции стрелять нельзя.
+	/// </summary>
+	public ManaCost[] ExtraCostPerLine { get; init; } = [];
 }
+
+/// <summary>Прибавка к характеристикам, которая зависит от обстановки (Фанатики и вера).</summary>
+public readonly record struct StatBonus(int Attack, int Defense, int Block);
 
 /// <summary>Что нужно выбрать игроку перед активацией способности.</summary>
 public enum ActivationTarget
@@ -57,6 +68,12 @@ public enum ActivationTarget
 
 	/// <summary>Вражеское существо в пределах дистанции выстрела.</summary>
 	ShotTarget,
+
+	/// <summary>Любое существо на поле.</summary>
+	AnyCreature,
+
+	/// <summary>Существо под вашим контролем.</summary>
+	FriendlyCreature,
 }
 
 /// <summary>
@@ -126,6 +143,24 @@ public sealed class AbilityData
 	/// <summary>Выстрел. null — у способности нет выстрела.</summary>
 	public ShotInfo Shot { get; init; }
 
+	/// <summary>Не может умереть: от смертельного урона остаётся с 1 здоровьем.</summary>
+	public bool CantDie { get; init; }
+
+	/// <summary>Нападение этого существа нельзя заблокировать.</summary>
+	public bool Unblockable { get; init; }
+
+	/// <summary>Кладбище: погибшие существа попадают на эту карту, а не в сброс.</summary>
+	public bool CollectsDeadCreatures { get; init; }
+
+	/// <summary>Голод: чтобы закончить фазу трофеев, нужно заплатить (здоровье, еда или изгнание из сброса).</summary>
+	public bool Hunger { get; init; }
+
+	/// <summary>Прибавка к характеристикам, пересчитывается каждый раз (Фанатики). null — нет.</summary>
+	public Func<Card, StatBonus> DynamicBonus { get; init; }
+
+	/// <summary>После стольких оплат трудом существо даёт 2 труда вместо 1 (Усердный). 0 — свойства нет.</summary>
+	public int DoubleLaborAfter { get; init; }
+
 	// ───────── Срабатывают по событию ─────────
 
 	/// <summary>Это существо убило другое (в схватке или выстрелом). Target — убитый.</summary>
@@ -139,6 +174,12 @@ public sealed class AbilityData
 
 	/// <summary>Для чар: существо, к которому они прикреплены, развернулось. Target — это существо.</summary>
 	public Action<AbilityContext> OnHostUntapped { get; init; }
+
+	/// <summary>Владелец этого существа разыграл другую карту. Target — разыгранная карта.</summary>
+	public Action<AbilityContext> OnOwnerPlayedCard { get; init; }
+
+	/// <summary>Это существо объявило нападение на существо. Target — атакованное существо.</summary>
+	public Action<AbilityContext> OnAttackDeclared { get; init; }
 
 	// ───────── Активируемая способность ─────────
 
@@ -168,4 +209,7 @@ public sealed class AbilityData
 	/// Только для способностей без поворота и без привязки к месту на поле.
 	/// </summary>
 	public bool UsableFromDiscard { get; init; }
+
+	/// <summary>Можно активировать из своего сброса всегда, без контроля над сбросами (Тень вечной ночи).</summary>
+	public bool UsableFromOwnDiscard { get; init; }
 }

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Godot;
@@ -116,6 +116,6 @@ public partial class DraftView : Control
 	{
 		List<string> ids = _selected.Select(c => c.Data.Id).ToList();
 		Hide();
-		_result.SetResult(ids);
+		TaskHelpers.CompleteInline(_result, ids);
 	}
 }

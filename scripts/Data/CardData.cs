@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 
 namespace CardGame;
 
@@ -55,6 +55,12 @@ public enum CardTag
 	Soldier,
 	Beast,
 	Fairy,
+	Spirit,
+	Unclean,
+	Artifact,
+	Golem,
+	Skaven,
+	Priest,
 }
 
 public static class CardTagExtensions
@@ -71,6 +77,12 @@ public static class CardTagExtensions
 		CardTag.Soldier => "Солдат",
 		CardTag.Beast => "Зверь",
 		CardTag.Fairy => "Фея",
+		CardTag.Spirit => "Дух",
+		CardTag.Unclean => "Нечисть",
+		CardTag.Artifact => "Артефакт",
+		CardTag.Golem => "Голем",
+		CardTag.Skaven => "Скавен",
+		CardTag.Priest => "Священник",
 		_ => tag.ToString(),
 	};
 }
@@ -138,6 +150,21 @@ public sealed class CardData
 	/// и её можно разыграть на линию, где умерло существо.
 	/// </summary>
 	public bool FreeAfterDeathThisTurn { get; init; }
+
+	/// <summary>
+	/// Существо, которое можно разыграть как чары (Легион): id карты-чар, в которую оно превращается.
+	/// Бросаешь на существо — игра спросит, как разыграть.
+	/// </summary>
+	public string EnchantmentFormId { get; init; }
+
+	/// <summary>В сброс уходит не эта карта, а карта с этим id (чары Легиона снова становятся Легионом).</summary>
+	public string DiscardAsId { get; init; }
+
+	/// <summary>false — служебная карта, в драфт не попадает (например, «Легион (чары)»).</summary>
+	public bool InDraft { get; init; } = true;
+
+	/// <summary>Жетон (Крыса): создаётся способностями, в драфт не попадает, при смерти просто исчезает.</summary>
+	public bool IsToken { get; init; }
 
 	/// <summary>Заклинание нужно бросить на существо (любого игрока).</summary>
 	public bool TargetsCreature { get; init; }

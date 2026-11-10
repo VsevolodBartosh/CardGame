@@ -53,6 +53,9 @@ public partial class TestBattle : Control
 	/// <summary>Игрок отвечает на вопрос в окне выбора (как оплатить, кого изгнать).</summary>
 	private bool _waitingForChoice;
 
+	/// <summary>Сквозной номер фазы с начала игры: так видно, какая фаза была «прошлой».</summary>
+	private int _phaseCounter;
+
 	private CardDetails _cardDetails;
 	private DiscardView _discardView;
 	private Label _turnLabel;
@@ -80,27 +83,22 @@ public partial class TestBattle : Control
 
 	public override void _Ready()
 	{
-		_bottomPlayer = new PlayerState(
-			"Игрок 1",
-			GetNode<HBoxContainer>("PlayerHand/Cards"),
-			GetNode<HBoxContainer>("PlayerAdvantages/Column/Cards"),
-			GetNode<Button>("PlayerDeck"),
-			GetNode<Button>("PlayerDiscard"),
-			GetNode<ManaPoolView>("PlayerManaPool"));
-		_topPlayer = new PlayerState(
-			"Игрок 2",
-			GetNode<HBoxContainer>("EnemyHand/Cards"),
-			GetNode<HBoxContainer>("EnemyAdvantages/Column/Cards"),
-			GetNode<Button>("EnemyDeck"),
-			GetNode<Button>("EnemyDiscard"),
-			GetNode<ManaPoolView>("EnemyManaPool"));
+		// _bottomPlayer и _topPlayer — это «Игрок 1» и «Игрок 2» по правилам (ряды 2–3 и 0–1).
+		// На экране свой игрок всегда внизу: у Игрока 2 в онлайне узлы «Player…» и «Enemy…» меняются местами.
+		bool flip = GameSession.Online && GameSession.LocalPlayerIndex == 1;
+		string first = flip ? "Enemy" : "Player";
+		string second = flip ? "Player" : "Enemy";
 
-		// Ряды сверху вниз. Соседние линии отличаются номером ряда на 1,
+		_bottomPlayer = CreatePlayer("Игрок 1", first);
+		_topPlayer = CreatePlayer("Игрок 2", second);
+		_localPlayer = GameSession.Online ? (flip ? _topPlayer : _bottomPlayer) : null;
+
+		// Ряды по правилам сверху вниз (0..3). Соседние линии отличаются номером ряда на 1,
 		// поэтому линии 1 и 2 (центр поля) — соседние линии разных игроков.
-		_topPlayer.Lanes.Add(new Lane(_topPlayer, 1, GetNode<PanelContainer>("Lanes/EnemyLane1")));
-		_topPlayer.Lanes.Add(new Lane(_topPlayer, 0, GetNode<PanelContainer>("Lanes/EnemyLane2")));
-		_bottomPlayer.Lanes.Add(new Lane(_bottomPlayer, 2, GetNode<PanelContainer>("Lanes/PlayerLane1")));
-		_bottomPlayer.Lanes.Add(new Lane(_bottomPlayer, 3, GetNode<PanelContainer>("Lanes/PlayerLane2")));
+		_topPlayer.Lanes.Add(new Lane(_topPlayer, 1, GetNode<PanelContainer>($"Lanes/{second}Lane1")));
+		_topPlayer.Lanes.Add(new Lane(_topPlayer, 0, GetNode<PanelContainer>($"Lanes/{second}Lane2")));
+		_bottomPlayer.Lanes.Add(new Lane(_bottomPlayer, 2, GetNode<PanelContainer>($"Lanes/{first}Lane1")));
+		_bottomPlayer.Lanes.Add(new Lane(_bottomPlayer, 3, GetNode<PanelContainer>($"Lanes/{first}Lane2")));
 
 		// Drag and drop: линия сама по себе не умеет принимать карты,
 		// поэтому «пересылаем» проверку и сброс карты в методы боя.
@@ -109,9 +107,9 @@ public partial class TestBattle : Control
 			lane.Panel.SetDragForwarding(
 				new Callable(),
 				Callable.From((Vector2 _, Variant data) => CanDrop(data.Obj as Card, lane, null)),
-				Callable.From((Vector2 _, Variant data) => Drop(data.Obj as Card, lane, null)));
+				Callable.From((Vector2 _, Variant data) => UiDrop(data.Obj as Card, lane, null)));
 			// Клик по пустому месту линии нужен, когда способность просит выбрать линию.
-			lane.Panel.GuiInput += @event => OnLaneGuiInput(lane, @event);
+			lane.Panel.GuiInput += @event => UiLaneInput(lane, @event);
 		}
 
 		_cardDetails = GetNode<CardDetails>("CardDetails");
@@ -126,29 +124,43 @@ public partial class TestBattle : Control
 		_paymentDoneButton = GetNode<Button>("PaymentPrompt/Row/Column/Buttons/DoneButton");
 		_choiceView = GetNode<ChoiceView>("ChoiceView");
 
+		// Кнопки и клики игрока не меняют бой напрямую, а отправляют команду (Ui… → Send).
+		// Так в онлайне одно и то же действие выполняется у обоих игроков. Подробнее в TestBattle.Network.cs.
 		foreach (PlayerState player in Players)
 		{
-			player.DeckButton.Pressed += () => OnDeckPressed(player);
+			player.DeckButton.Pressed += () => UiDeckPressed(player);
 			player.DeckButton.GuiInput += @event => OnDeckGuiInput(player, @event);
 			player.DiscardButton.Pressed += () => OnDiscardPressed(player);
-			player.ManaPool.ManaPressed += type => OnManaPressed(player, type);
+			player.ManaPool.ManaPressed += type => UiManaPressed(player, type);
 		}
 
-		_nextPhaseButton.Pressed += OnNextPhasePressed;
-		_paymentCancelButton.Pressed += CancelPayment;
-		_paymentDoneButton.Pressed += OnPaymentDonePressed;
+		_nextPhaseButton.Pressed += UiNextPhase;
+		_paymentCancelButton.Pressed += UiCancelPayment;
+		_paymentDoneButton.Pressed += UiPaymentDone;
 		_discardView.CardClicked += OnViewedCardClicked;
-		_discardView.TakeRandomRequested += OnTakeRandomFromDiscard;
-		_cardDetails.ActivateRequested += OnActivateRequested;
+		_discardView.TakeRandomRequested += UiTakeRandom;
+		_cardDetails.ActivateRequested += UiActivate;
 		ReadyAbilitiesUi();
 
 		_currentPlayer = _bottomPlayer;
 		_phase = BattlePhase.Supply;
 		RefreshView();
 
-		// Сначала драфт, бой начнётся, когда он закончится.
-		StartGame();
+		// Сначала драфт, бой начнётся, когда он закончится. В онлайне — когда оба игрока загрузили бой.
+		ReadyNetwork();
 	}
+
+	private PlayerState CreatePlayer(string name, string nodePrefix) => new(
+		name,
+		GetNode<HBoxContainer>($"{nodePrefix}Hand/Cards"),
+		GetNode<HBoxContainer>($"{nodePrefix}Advantages/Column/Cards"),
+		GetNode<Button>($"{nodePrefix}Deck"),
+		GetNode<Button>($"{nodePrefix}Discard"),
+		GetNode<ManaPoolView>($"{nodePrefix}ManaPool"));
+
+	/// <summary>Цвет рамки по стороне экрана: свои карты зелёные, чужие красные (в тестовой битве — Игрок 1 зелёный).</summary>
+	private Color ColorFor(PlayerState player) =>
+		player == (_localPlayer ?? _bottomPlayer) ? BottomPlayerColor : TopPlayerColor;
 
 	// ───────────── Колоды и карты ─────────────
 
@@ -195,7 +207,7 @@ public partial class TestBattle : Control
 		if (player.Deck.Count == 0)
 			return;
 
-		int index = Random.Shared.Next(player.Deck.Count);
+		int index = _rng.Next(player.Deck.Count);
 		string cardId = player.Deck[index];
 		player.Deck.RemoveAt(index);
 
@@ -207,16 +219,21 @@ public partial class TestBattle : Control
 	{
 		var card = CardScene.Instantiate<Card>();
 		card.Setup(cardId);
-		card.Clicked += OnCardClicked;
+		RegisterCard(card); // Номер карты, одинаковый у обоих игроков (для команд по сети).
+		card.Clicked += UiCardClicked;
+		card.DoubleClicked += UiCardDoubleClicked;
+		card.RightClicked += UiCardLongPressed;
+		card.DelayClicks = true;
 		card.AttachmentClicked += attachment => _cardDetails.Open(attachment);
 		card.SetDragForwarding(
 			Callable.From((Vector2 _) => StartDrag(card)),
 			Callable.From((Vector2 _, Variant data) => CanDrop(data.Obj as Card, LaneOf(card), card)),
-			Callable.From((Vector2 _, Variant data) => Drop(data.Obj as Card, LaneOf(card), card)));
+			Callable.From((Vector2 _, Variant data) => UiDrop(data.Obj as Card, LaneOf(card), card)));
 		card.Player = player;
+		card.OwnerPlayer = player;
 		parent.AddChild(card);
-		// Рамка цвета линий игрока: так видно, чья карта, даже на чужой линии.
-		card.SetBaseBorder(player == _bottomPlayer ? BottomPlayerColor : TopPlayerColor);
+		// Рамка цвета стороны: так видно, чья карта, даже на чужой линии.
+		card.SetBaseBorder(ColorFor(player));
 		return card;
 	}
 
@@ -237,15 +254,48 @@ public partial class TestBattle : Control
 		&& player == ActingPlayer
 		&& !player.HasDrawnThisTurn;
 
-	// Правый клик по колоде: посмотреть её содержимое. Левый клик по-прежнему берёт карту.
+	// Посмотреть колоду: правый клик мышью или зажатие (на телефоне). Левый клик по-прежнему берёт карту.
 	// GuiInput приходит и выключенной кнопке, поэтому смотреть можно, даже когда брать нельзя.
 	private void OnDeckGuiInput(PlayerState player, InputEvent @event)
 	{
-		if (@event is not InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true })
+		if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true })
+		{
+			ShowDeck(player);
+			return;
+		}
+
+		if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left } mouse)
+		{
+			if (mouse.Pressed)
+				WaitDeckLongPress(player);
+			else
+				_deckPressToken++; // Отпустили раньше — это обычный клик.
+		}
+	}
+
+	// Номер нажатия на колоду: если кнопку отпустили, номер меняется и зажатие не срабатывает.
+	private int _deckPressToken;
+
+	// Зажали колоду на LongPressSeconds — показываем её, а сам клик (добор) отменяем.
+	private async void WaitDeckLongPress(PlayerState player)
+	{
+		int token = ++_deckPressToken;
+		await ToSignal(GetTree().CreateTimer(Card.LongPressSeconds), SceneTreeTimer.SignalName.Timeout);
+		if (token != _deckPressToken)
 			return;
 
-		// Только владельцу: смотрит тот, кто сейчас действует, иначе соперник увидит чужую колоду.
-		if (player != ActingPlayer || player.Deck.Count == 0)
+		_suppressDeckPress = true;
+		ShowDeck(player);
+	}
+
+	// Сработало зажатие: следующее «нажатие» кнопки колоды — это отпускание после зажатия, не добор.
+	private bool _suppressDeckPress;
+
+	private void ShowDeck(PlayerState player)
+	{
+		// Только владельцу, иначе соперник увидит чужую колоду. В тестовой битве — тому, кто сейчас действует.
+		PlayerState viewer = _localPlayer ?? ActingPlayer;
+		if (player != viewer || player.Deck.Count == 0)
 			return;
 
 		_viewedDiscardOwner = null;
@@ -267,10 +317,32 @@ public partial class TestBattle : Control
 			return;
 
 		_viewedDiscardOwner = player;
-		_discardView.Open($"Сброс: {player.Name}", player.Discard, CardScene, player, CanTakeRandomFrom(player));
+		bool canTake = IsLocal(ActingPlayer) && CanTakeRandomFrom(player);
+		_discardView.Open($"Сброс: {player.Name}", player.Discard, CardScene, player, canTake);
 	}
 
-	private void OnCardClicked(Card card)
+	/// <summary>
+	/// Клик по карте — действие в игре? (выбор цели, отмена активации, сброс или жертва в оплату, труд).
+	/// Если нет, клик просто открывает подробности карты.
+	/// </summary>
+	private bool IsGameClick(Card card)
+	{
+		if (_targeting != null)
+			return true;
+		if (_pending == null)
+			return false;
+
+		return (!_pending.FromHand && card == _pending.Card)
+			|| CanSelectForDiscard(card)
+			|| CanSelectForSacrifice(card)
+			|| CanPayLabor(card);
+	}
+
+	/// <summary>Кто сейчас «отвечает» кликами: выбирает цель или платит.</summary>
+	private PlayerState ClickingPlayer => _targeting?.Player ?? _pending?.Player;
+
+	/// <summary>Выполнить игровой клик по карте (у обоих игроков, по команде).</summary>
+	private void ExecuteCardClick(Card card)
 	{
 		// Идёт выбор цели способности: клик выбирает цель или (по самой карте) отменяет.
 		if (_targeting != null)
@@ -279,39 +351,29 @@ public partial class TestBattle : Control
 			return;
 		}
 
-		// Активацию отменяют повторным кликом по той же карте.
-		if (_pending is { FromHand: false } && card == _pending.Card)
-		{
-			CancelPayment();
+		if (_pending == null)
 			return;
-		}
 
-		// Пока идёт оплата: клик по карте в руке выбирает её для сброса,
-		// клик по своему существу — жертва (цена X) или поворот за труд.
-		if (_pending != null)
-		{
-			if (CanSelectForDiscard(card))
-			{
-				ToggleDiscardSelection(card);
-				return;
-			}
+		// Активацию отменяют повторным кликом по той же карте.
+		if (!_pending.FromHand && card == _pending.Card)
+			CancelPayment();
+		// Клик по карте в руке выбирает её для сброса, по своему существу — жертва (цена X) или труд.
+		else if (CanSelectForDiscard(card))
+			ToggleDiscardSelection(card);
+		else if (CanSelectForSacrifice(card))
+			ToggleSacrificeSelection(card);
+		else if (CanPayLabor(card))
+			PayLabor(card);
+	}
 
-			if (CanSelectForSacrifice(card))
-			{
-				ToggleSacrificeSelection(card);
-				return;
-			}
-
-			if (CanPayLabor(card))
-			{
-				PayLabor(card);
-				return;
-			}
-		}
-
+	/// <summary>Подробности карты. Кнопки способностей — только тому, кто сейчас может их нажать.</summary>
+	private void ShowDetails(Card card)
+	{
 		// Рубашку соперника открыть нельзя, иначе он увидит чужие карты.
-		if (!card.IsFaceDown)
-			_cardDetails.Open(card, ActivatableAbilities(card));
+		if (card.IsFaceDown)
+			return;
+
+		_cardDetails.Open(card, IsLocal(ActingPlayer) ? ActivatableAbilities(card) : null);
 	}
 
 	public override void _UnhandledInput(InputEvent @event)
@@ -320,14 +382,21 @@ public partial class TestBattle : Control
 		if (!@event.IsActionPressed("ui_cancel"))
 			return;
 
+		bool canCancel = _targeting != null || _pending is { FromHand: false };
+		if (!canCancel || !IsLocal(ClickingPlayer))
+			return;
+
+		Send(BattleCommand.Of("cancel"));
+		GetViewport().SetInputAsHandled();
+	}
+
+	/// <summary>Отмена выбора цели или оплаты способности (у обоих игроков, по команде).</summary>
+	private void ExecuteCancel()
+	{
 		if (_targeting != null)
 			CancelTargeting();
 		else if (_pending is { FromHand: false })
 			CancelPayment();
-		else
-			return;
-
-		GetViewport().SetInputAsHandled();
 	}
 
 	// ───────────── Drag and drop ─────────────
@@ -336,7 +405,8 @@ public partial class TestBattle : Control
 	// Вернуть пустой Variant значит «эту карту тащить нельзя».
 	private Variant StartDrag(Card card)
 	{
-		if (!CanDrag(card))
+		// Тащить может только тот, кто сидит за этим экраном и сейчас действует.
+		if (!IsLocal(ActingPlayer) || !CanDrag(card))
 			return default;
 
 		// Превью рисуется от курсора вправо-вниз. Сдвигаем его,
@@ -456,6 +526,10 @@ public partial class TestBattle : Control
 
 		if (data.Is(CardType.Creature))
 		{
+			// Легион можно бросить на любое существо: тогда он разыгрывается как чары.
+			if (data.EnchantmentFormId != null && target != null)
+				return true;
+
 			return lane == player.NearestLane
 				|| (player.CanPlayOnSecondLine && lane == player.SecondLane)
 				|| (data.FreeAfterDeathThisTurn && lane != null && _deathLanesThisTurn.Contains(lane));
@@ -484,7 +558,7 @@ public partial class TestBattle : Control
 		else if (_phase == BattlePhase.Attack)
 			StartAttack(dragged, lane, target);
 		else if (_phase == BattlePhase.Defense)
-			FindDefendableAttack(dragged, target).Defender = dragged;
+			DeclareDefense(dragged, target);
 
 		RefreshView();
 	}
@@ -515,28 +589,53 @@ public partial class TestBattle : Control
 		return target.Player == OtherPlayer && distance <= range;
 	}
 
-	/// <summary>Объявить нападение. Если у существа «Лень», сначала нужно заплатить.</summary>
+	/// <summary>
+	/// Объявить нападение. Стопка нападает целиком: каждая её карта, которая может, нападает на ту же цель.
+	/// Если у существа «Лень», сначала нужно заплатить (за каждую карту стопки).
+	/// </summary>
 	private void StartAttack(Card attacker, Lane lane, Card target)
 	{
+		List<Card> attackers = StackOf(attacker).Where(c => CanStartAttack(c) && CanAttack(c, lane, target)).ToList();
+
 		ManaCost[] laziness = attacker.Abilities.SelectMany(a => a.LazinessCost).ToArray();
 		bool firstAttack = !_attacks.Any(a => a.Attacker == attacker);
 
 		if (laziness.Length > 0 && firstAttack)
 		{
-			StartPayment(attacker, attacker.Player, laziness, 0, fromHand: false,
-				onComplete: () => DeclareAttack(attacker, lane, target));
+			ManaCost[] total = attackers.SelectMany(_ => laziness).ToArray();
+			StartPayment(attacker, attacker.Player, total, 0, fromHand: false,
+				onComplete: () => attackers.ForEach(c => DeclareAttack(c, lane, target)));
 			return;
 		}
 
-		DeclareAttack(attacker, lane, target);
+		attackers.ForEach(c => DeclareAttack(c, lane, target));
 	}
 
 	private void DeclareAttack(Card attacker, Lane lane, Card target)
 	{
 		_attacks.Add(new Attack(attacker, target, lane, LaneOf(attacker)));
 		// Нападение на существо поворачивает нападающего.
-		if (target != null)
-			attacker.SetTapped(true);
+		if (target == null)
+			return;
+
+		attacker.SetTapped(true);
+		foreach (AbilityData ability in attacker.Abilities)
+			ability.OnAttackDeclared?.Invoke(Context(attacker, attacker.Player, target));
+	}
+
+	/// <summary>
+	/// Защита. Стопка защитников раздаётся по нападениям стопки нападающих:
+	/// каждый защитник берёт себе одно ещё не заблокированное нападение.
+	/// </summary>
+	private void DeclareDefense(Card defender, Card attackerCard)
+	{
+		foreach (Card member in StackOf(defender).ToList())
+		{
+			Attack attack = FindDefendableAttack(member, attackerCard);
+			if (attack == null)
+				break;
+			attack.Defender = member;
+		}
 	}
 
 	/// <summary>
@@ -550,7 +649,10 @@ public partial class TestBattle : Control
 
 		return _attacks.FirstOrDefault(attack =>
 		{
-			if (attack.Attacker != attackerCard || attack.Defender != null)
+			if (!StackOf(attackerCard).Contains(attack.Attacker) || attack.Defender != null)
+				return false;
+
+			if (attack.Attacker.HasAny(a => a.Unblockable))
 				return false;
 
 			if (attack.Attacker.HasAny(a => a.Flight))
@@ -602,7 +704,7 @@ public partial class TestBattle : Control
 			int damageToVictim = attacker.Attack / targets;
 
 			bool noDefenseDamage = victim.IsTapped || attacker.HasAny(a => a.IgnoresDefenseWhenAttacking);
-			int damageToAttacker = AfterBlock(noDefenseDamage ? 0 : victim.Data.Defense, attacker);
+			int damageToAttacker = AfterBlock(noDefenseDamage ? 0 : victim.Defense, attacker);
 			damageToVictim = AfterBlock(damageToVictim, victim);
 
 			// Первый удар: кто с ним убивает противника, сам урона не получает.
@@ -724,6 +826,10 @@ public partial class TestBattle : Control
 	{
 		var lostHero = new HashSet<PlayerState>();
 
+		// «Не может умереть»: от смертельного урона остаётся с 1 здоровьем.
+		foreach (Card undying in AllCreatures.Where(c => c.IsDead && c.HasAny(a => a.CantDie)))
+			undying.Heal(1);
+
 		// ToList: снимаем копию, потому что в цикле убираем карты с линий.
 		foreach (Card creature in AllCreatures.Where(c => c.IsDead).ToList())
 		{
@@ -748,7 +854,20 @@ public partial class TestBattle : Control
 			}
 
 			_deathLanesThisTurn.Add(lane);
-			SendToDiscard(creature);
+
+			// Кладбище хозяина существа забирает его себе вместо сброса. Чужое кладбище не трогает.
+			Card graveyard = FindGraveyard(creature.OwnerPlayer ?? creature.Player);
+			if (graveyard != null && !creature.Data.IsToken)
+			{
+				graveyard.StoredCards.Add(creature.Data.DiscardAsId ?? creature.Data.Id);
+				creature.GetParent()?.RemoveChild(creature);
+				creature.QueueFree();
+				graveyard.Heal(0); // Обновить отметку [N] на карте.
+			}
+			else
+			{
+				SendToDiscard(creature);
+			}
 		}
 
 		CheckHeroDefeat(lostHero);
@@ -786,17 +905,30 @@ public partial class TestBattle : Control
 		_waitingForChoice = true;
 		try
 		{
+			// Легион: брошен на существо — можно разыграть как чары (отдельная карта «Легион (чары)»).
+			if (data.EnchantmentFormId != null && target != null)
+			{
+				bool asCreature = lane == player.NearestLane || (player.CanPlayOnSecondLine && lane == player.SecondLane);
+				bool asEnchantment = !asCreature
+					|| await ChooseAsync(player, $"Как разыграть «{data.Name}»?", ["Как существо", "Как чары"]) == 1;
+				if (asEnchantment)
+				{
+					card = SwapCard(card, data.EnchantmentFormId);
+					data = card.Data;
+				}
+			}
+
 			// Скидка Зомби: изгнать до N существ из своего сброса, каждое −1 к цене.
 			List<string> exiled = [];
 			List<string> creaturesInDiscard = player.Discard.Where(id => CardsData.Get(id).Is(CardType.Creature)).ToList();
 			if (data.ExileDiscountMax > 0 && creaturesInDiscard.Count > 0)
 			{
 				int max = Math.Min(data.ExileDiscountMax, creaturesInDiscard.Count);
-				exiled = await _draftView.Pick($"{player.Name}: изгнать до {max} существ из сброса (−1 к цене за каждое)",
-					creaturesInDiscard, 0, max, CardScene);
+				exiled = await PickAsync(player, $"изгнать до {max} существ из сброса (−1 к цене за каждое)",
+					creaturesInDiscard, 0, max);
 			}
 
-			List<CostOption> options = CostOptionsFor(card, exiled.Count)
+			List<CostOption> options = CostOptionsFor(card, exiled.Count + card.CostDiscount)
 				.Where(o => CanAfford(player, card, o))
 				.ToList();
 
@@ -842,7 +974,7 @@ public partial class TestBattle : Control
 			new() { Mana = Discounted(data.Cost, exileDiscount), Labor = data.LaborCost, Discard = data.DiscardCost },
 		};
 		options.AddRange(data.AlternativeCosts.Select(o =>
-			new CostOption { Mana = o.Mana, Labor = o.Labor, Discard = o.Discard + data.DiscardCost }));
+			new CostOption { Mana = Discounted(o.Mana, exileDiscount), Labor = o.Labor, Discard = o.Discard + data.DiscardCost }));
 		return options;
 	}
 
@@ -868,6 +1000,15 @@ public partial class TestBattle : Control
 	private void ResolvePlay(Card card, PlayerState player, Lane lane, Card target, int x)
 	{
 		CardData data = card.Data;
+		card.PlayedPhase = _phaseCounter;
+		card.CostDiscount = 0;
+
+		// «Каждый раз, когда вы разыгрываете карту» (Водный Элементаль). Сама карта себя не считает.
+		foreach (Card watcher in AllCreatures.Where(c => c.Player == player && c != card).ToList())
+		{
+			foreach (AbilityData ability in watcher.Abilities)
+				ability.OnOwnerPlayedCard?.Invoke(Context(watcher, player, card));
+		}
 
 		if (data.IsPayment || data.Is(CardType.Spell))
 		{
@@ -907,12 +1048,30 @@ public partial class TestBattle : Control
 	private AbilityContext Context(Card source, PlayerState player, Card target, Lane targetLane = null, int x = 0) =>
 		new() { Player = player, Source = source, Target = target, TargetLane = targetLane, X = x, Battle = this };
 
+	/// <summary>
+	/// Карта уходит в сброс своего хозяина (не того, кто её сейчас контролирует).
+	/// Чары Легиона уходят в сброс как обычный Легион (DiscardAsId).
+	/// </summary>
 	private static void SendToDiscard(Card card)
 	{
-		card.Player.Discard.Add(card.Data.Id);
+		// Жетоны (Крысы) в сброс не попадают — просто исчезают.
+		if (card.Data.IsToken)
+		{
+			card.GetParent()?.RemoveChild(card);
+			card.QueueFree();
+			return;
+		}
+
+		PlayerState owner = card.OwnerPlayer ?? card.Player;
+		owner.Discard.Add(card.Data.DiscardAsId ?? card.Data.Id);
 		card.GetParent()?.RemoveChild(card);
 		card.QueueFree();
 	}
+
+	/// <summary>Кладбище этого игрока: оно забирает только его собственных существ. null — кладбища нет.</summary>
+	private static Card FindGraveyard(PlayerState owner) =>
+		owner.Advantages.GetChildren().OfType<Card>()
+			.FirstOrDefault(c => c.HasAny(a => a.CollectsDeadCreatures));
 
 	// ───────────── Оплата: мана, труд, сброс карт, цена X ─────────────
 
@@ -975,7 +1134,10 @@ public partial class TestBattle : Control
 		_paymentPrompt.Position = opponentHand.Position;
 		_paymentPrompt.Size = opponentHand.Size;
 		pending.Card.Reparent(_paymentSlot, keepGlobalTransform: false);
-		_paymentPrompt.Show();
+
+		// Окно с кнопками — только тому, кто платит. У соперника карта просто ждёт (подсказка справа).
+		if (IsLocal(pending.Player))
+			_paymentPrompt.Show();
 	}
 
 	/// <summary>Платит сам за те единицы маны, где выбора на самом деле нет.</summary>
@@ -1039,8 +1201,13 @@ public partial class TestBattle : Control
 
 	private void PayLabor(Card worker)
 	{
+		// Усердный после нескольких оплат трудом даёт 2 труда за раз.
+		int doubleAfter = worker.Abilities.Select(a => a.DoubleLaborAfter).FirstOrDefault(n => n > 0);
+		int amount = doubleAfter > 0 && worker.LaborCount >= doubleAfter ? 2 : 1;
+
 		worker.SetTapped(true);
-		_pending.Card.AddLabor(1);
+		worker.LaborCount++;
+		_pending.Card.AddLabor(amount);
 
 		if (_pending.IsDone)
 			CompletePayment();
@@ -1098,6 +1265,7 @@ public partial class TestBattle : Control
 			Kill(sacrificed);
 
 		payment.Card.ResetLabor();
+		payment.Card.LastPaidMana = payment.PaidMana;
 		payment.OnComplete(x);
 		if (payment.TempSource)
 			payment.Card.Free();
@@ -1122,7 +1290,12 @@ public partial class TestBattle : Control
 
 		payment.Refund();
 		if (payment.FromHand)
+		{
 			payment.Card.Reparent(payment.Player.Hand, keepGlobalTransform: false);
+			// «Легион (чары)» вернулся в руку — снова становится обычным Легионом.
+			if (payment.Card.Data.DiscardAsId != null)
+				SwapCard(payment.Card, payment.Card.Data.DiscardAsId);
+		}
 
 		ShowHint("");
 		if (payment.Card.LaborPaid > 0)
@@ -1136,13 +1309,15 @@ public partial class TestBattle : Control
 
 	// ───────────── Фазы ─────────────
 
-	private void OnNextPhasePressed()
+	// async: в конце хода может понадобиться заплатить «Голод», и игра ждёт выбора игрока.
+	private async void OnNextPhasePressed()
 	{
 		if (IsBusy)
 			return;
 
 		_cardDetails.Close();
 		ShowHint("");
+		_phaseCounter++;
 
 		switch (_phase)
 		{
@@ -1152,7 +1327,18 @@ public partial class TestBattle : Control
 				RunTrophyEffects();
 				break;
 			case BattlePhase.Trophy:
-				StartNextTurn();
+				_waitingForChoice = true;
+				try
+				{
+					await PayHunger();
+				}
+				finally
+				{
+					_waitingForChoice = false;
+				}
+
+				if (!_gameEnded)
+					StartNextTurn();
 				break;
 			default:
 				_phase++;
@@ -1177,6 +1363,18 @@ public partial class TestBattle : Control
 		}
 
 		_deathLanesThisTurn.Clear();
+
+		// Бонусы «до конца хода» пропадают.
+		foreach (Card creature in AllCreatures)
+			creature.ClearTempBonuses();
+
+		// Контроль «до конца хода» возвращается хозяину.
+		foreach (Card creature in AllCreatures.Where(c => c.OwnerPlayer != null && c.Player != c.OwnerPlayer))
+		{
+			creature.Player = creature.OwnerPlayer;
+			creature.SetBaseBorder(ColorFor(creature.Player));
+		}
+
 		UntapAll(_currentPlayer);
 
 		// Обездвиживание длится до снабжения того, кто его наложил.
@@ -1224,6 +1422,13 @@ public partial class TestBattle : Control
 	{
 		foreach (Card creature in AllCreatures.Where(c => c.Player == _currentPlayer).ToList())
 		{
+			// Свои эффекты существа (Водный Элементаль теряет здоровье).
+			foreach (AbilityData ability in creature.Abilities)
+				ability.OnTrophyPhase?.Invoke(Context(creature, creature.Player, null));
+
+			if (creature.IsPoisoned)
+				ApplyDamage(creature, 1, null);
+
 			foreach (Card attachment in creature.Attachments)
 			{
 				// Player в контексте — хозяин чар: он их разыграл, даже если сработали они в чужой ход.
@@ -1251,15 +1456,17 @@ public partial class TestBattle : Control
 	private void RefreshView()
 	{
 		PlayerState acting = ActingPlayer;
+		Restack();
 
 		foreach (PlayerState player in Players)
 		{
-			// Свою руку видит тот, кто сейчас действует; у другого только рубашки.
+			// В онлайне свою руку видит только её хозяин. В тестовой битве — тот, кто сейчас действует.
+			bool handVisible = _localPlayer != null ? player == _localPlayer : player == acting;
 			foreach (Card card in player.Hand.GetChildren().OfType<Card>())
-				card.SetFaceDown(player != acting);
+				card.SetFaceDown(!handVisible);
 
 			player.DeckButton.Text = $"Колода\n{player.Deck.Count}";
-			player.DeckButton.Disabled = !CanDraw(player) || player.Deck.Count == 0;
+			player.DeckButton.Disabled = !CanDraw(player) || player.Deck.Count == 0 || !IsLocal(player);
 			player.DiscardButton.Text = $"Сброс\n{player.Discard.Count}";
 			player.DiscardButton.Disabled = player.Discard.Count == 0;
 
@@ -1275,7 +1482,10 @@ public partial class TestBattle : Control
 		{
 			lane.SetHighlight(null);
 			foreach (Card card in lane.AllCards)
+			{
 				card.SetHighlight(null);
+				card.Redraw(); // Характеристики могли измениться от маны (Фанатики).
+			}
 		}
 
 		foreach (Attack attack in _attacks)
@@ -1292,12 +1502,17 @@ public partial class TestBattle : Control
 		{
 			foreach (Card sacrificed in _pending.SelectedSacrifices)
 				sacrificed.SetHighlight(SelectedColor);
-			UpdatePaymentPrompt();
+
+			if (IsLocal(_pending.Player))
+				UpdatePaymentPrompt();
+			else
+				ShowRemotePaymentHint();
 		}
 
-		_turnLabel.Text = $"Ход: {_currentPlayer.Name}\nФаза: {_phase.ToRussian()}\nДействует: {acting.Name}";
+		string you = _localPlayer != null ? $"\nВы: {_localPlayer.Name}" : "";
+		_turnLabel.Text = $"Ход: {_currentPlayer.Name}\nФаза: {_phase.ToRussian()}\nДействует: {acting.Name}{you}";
 		_nextPhaseButton.Text = _phase == BattlePhase.Trophy ? "Конец хода" : "Далее";
-		_nextPhaseButton.Disabled = IsBusy;
+		_nextPhaseButton.Disabled = IsBusy || !IsLocal(acting);
 	}
 
 	private void UpdatePaymentPrompt()
@@ -1324,6 +1539,10 @@ public partial class TestBattle : Control
 		lines.Add("Отмена: клик по карте ещё раз или Esc.");
 		ShowHint(string.Join("\n", lines));
 	}
+
+	/// <summary>У соперника идёт оплата: показываем только короткую подсказку.</summary>
+	private void ShowRemotePaymentHint() =>
+		ShowHint($"{_pending.Player.Name} оплачивает «{_pending.Card.Data.Name}»…");
 
 	// ───────────── Вспомогательные классы ─────────────
 
@@ -1401,6 +1620,9 @@ public partial class TestBattle : Control
 			_paid.Add(type);
 			Units.RemoveAt(unitIndex);
 		}
+
+		/// <summary>Какой маной уже заплачено.</summary>
+		public IReadOnlyList<ManaType> PaidMana => _paid.ToList();
 
 		/// <summary>Цена X: списать одну единицу маны любого типа.</summary>
 		public void PayAny(ManaType type)

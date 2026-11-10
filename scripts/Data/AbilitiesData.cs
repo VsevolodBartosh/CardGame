@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 
 namespace CardGame;
@@ -351,6 +351,296 @@ public static class AbilitiesData
 			},
 		},
 
+		// ───────── Элементали ─────────
+		Shot("ability_shot_fire_elemental", damage: 5, distance: 1, selfDamage: 3),
+		new AbilityData
+		{
+			Id = "ability_water_elemental",
+			Name = "Течение",
+			Description = "В фазу трофеев теряет 1 здоровье. Каждый раз, когда вы разыгрываете карту с водой в цене, "
+				+ "восстановите этой карте 3 здоровья.",
+			OnTrophyPhase = ctx => ctx.Battle.DealDamage(ctx.Source, 1),
+			OnOwnerPlayedCard = ctx =>
+			{
+				if (ctx.Target.Data.Cost.Any(c => c.Types.Contains(ManaType.Water)))
+					ctx.Battle.Heal(ctx.Source, 3);
+			},
+		},
+		new AbilityData
+		{
+			Id = "ability_earth_elemental",
+			Name = "Плодородие",
+			Description = "1 труд и поворот: получите 1 траву.",
+			ActivationLaborCost = 1,
+			ActivationTapsSelf = true,
+			OnActivated = ctx => ctx.Player.AddMana(ManaType.Grass, 1),
+		},
+		new AbilityData
+		{
+			Id = "ability_air_elemental",
+			Name = "Вихрь",
+			Description = "Когда эта карта нападает на существо, поверните ещё одно вражеское существо на той же линии.",
+			OnAttackDeclared = ctx => ctx.Battle.TapAnotherEnemyOnLane(ctx.Source, ctx.Target),
+		},
+
+		// ───────── Легион, Тень, Животное ─────────
+		new AbilityData
+		{
+			Id = "ability_legion_copy",
+			Name = "Нас много",
+			Description = "1 тьма: создайте на той же линии полную изначальную копию этой карты.",
+			ActivationCost = [new ManaCost(1, ManaType.Darkness)],
+			OnActivated = ctx => ctx.Battle.CreateCopy(ctx.Source),
+		},
+		new AbilityData
+		{
+			Id = "ability_legion_as_enchantment",
+			Name = "Одержимость",
+			Description = "Можно разыграть как чары за 2 тьмы: бросьте карту на существо.",
+		},
+		new AbilityData
+		{
+			Id = "ability_legion_enchantment",
+			Name = "Одержимость",
+			Description = "Прикреплённое существо получает +1/+1/+1 до конца матча. Если вы его не контролируете, "
+				+ "получите над ним контроль до конца хода.",
+			OnPlayed = ctx =>
+			{
+				ctx.Battle.Buff(ctx.Target, attack: 1, defense: 1, health: 1);
+				if (ctx.Target.Player != ctx.Player)
+					ctx.Battle.TakeControlUntilEndOfTurn(ctx.Target, ctx.Player);
+			},
+		},
+		new AbilityData
+		{
+			Id = "ability_shadow_undying",
+			Name = "Вечная ночь",
+			Description = "Эта карта не может умереть. Эту карту нельзя заблокировать.",
+			CantDie = true,
+			Unblockable = true,
+		},
+		new AbilityData
+		{
+			Id = "ability_shadow_return",
+			Name = "Возвращение",
+			Description = "Верните эту карту в руку (работает и из сброса).",
+			UsableFromOwnDiscard = true,
+			OnActivated = ctx => ctx.Battle.ReturnToHand(ctx.Source),
+		},
+		new AbilityData
+		{
+			Id = "ability_strange_animal",
+			Name = "Подношение",
+			Description = "Пожертвуйте эту карту, затем выберите: получите 1 золото или оплатите 1 стоимости Человека в вашей руке.",
+			OnActivated = ctx => ctx.Battle.ResolveStrangeAnimal(ctx.Source, ctx.Player),
+		},
+
+		// ───────── Заклинания и преимущества (набор 3) ─────────
+		new AbilityData
+		{
+			Id = "ability_nastiness",
+			Name = "Гадство",
+			Description = "Выберите один эффект: противник сбрасывает 2 карты; противник жертвует карту выбранного вами типа, "
+				+ "если контролирует больше 1 карты этого типа; верните в руку оппонента карту, сыгранную в прошлую фазу.",
+			OnPlayed = ctx => ctx.Battle.ResolveNastiness(ctx.Player),
+		},
+		new AbilityData
+		{
+			Id = "ability_multi_gaze",
+			Name = "Множественный взор",
+			Description = "2 тьмы и поворот: выберите тип карты. Посмотрите столько случайных карт из руки оппонента, сколько карт "
+				+ "у вас в руке; если у вас больше, досмотрите остальное из его колоды. Увиденные карты из руки выбранного типа сбросьте.",
+			ActivationCost = [new ManaCost(2, ManaType.Darkness)],
+			ActivationTapsSelf = true,
+			OnActivated = ctx => ctx.Battle.ResolveMultiGaze(ctx.Player),
+		},
+		new AbilityData
+		{
+			Id = "ability_graveyard_collect",
+			Name = "Кладбище",
+			Description = "Погибшие существа попадают на эту карту, а не в сброс.",
+			CollectsDeadCreatures = true,
+		},
+		new AbilityData
+		{
+			Id = "ability_graveyard_harvest",
+			Name = "Жатва",
+			Description = "1 любая мана и поворот: получите свет или тьму в количестве, равном числу существ на кладбище.",
+			ActivationCost = [new ManaCost(1, ManaTypeExtensions.AllTypes)],
+			ActivationTapsSelf = true,
+			OnActivated = ctx => ctx.Battle.ResolveGraveyardHarvest(ctx.Source, ctx.Player),
+		},
+
+		// ───────── Набор 4: общие ─────────
+		new AbilityData
+		{
+			Id = "ability_hunger",
+			Name = Glossary.Hunger,
+			Description = "Чтобы закончить фазу трофеев: 1 здоровье этой карты, 1 еда или изгнать 1 существо из любого сброса. "
+				+ "Не срабатывает, если в этом ходу умерло существо.",
+			GlossaryTerms = [Glossary.Hunger],
+			Hunger = true,
+		},
+
+		// ───────── Теневая тварь ─────────
+		new AbilityData
+		{
+			Id = "ability_shadow_beast_feed",
+			Name = "Голод тьмы",
+			Description = "Каждый раз, когда вы разыгрываете карту, заплатив тьмой, эта карта получает +1 к атаке до конца хода.",
+			OnOwnerPlayedCard = ctx =>
+			{
+				if (ctx.Target.LastPaidMana.Contains(ManaType.Darkness))
+					ctx.Battle.AddTempAttack(ctx.Source, 1);
+			},
+		},
+		new AbilityData
+		{
+			Id = "ability_shadow_beast_grow",
+			Name = "Рост",
+			Description = "1 тьма: эта карта получает +1/+1/+2 до конца матча.",
+			ActivationCost = [new ManaCost(1, ManaType.Darkness)],
+			OnActivated = ctx => ctx.Battle.Buff(ctx.Source, attack: 1, defense: 1, health: 2),
+		},
+
+		// ───────── Скавены ─────────
+		new AbilityData
+		{
+			Id = "ability_plague_monk",
+			Name = "Мор",
+			Description = "Когда эта карта нападает на существо, все существа обоих игроков получают отравление.",
+			GlossaryTerms = [Glossary.Poison],
+			OnAttackDeclared = ctx => ctx.Battle.PoisonAllCreatures(),
+		},
+		new AbilityData
+		{
+			Id = "ability_skaven_assassin_raid",
+			Name = "Набег",
+			Description = "Поворот, если эта карта на первой или второй линии оппонента в фазу диверсии: "
+				+ "противник сбрасывает карту, вы получаете 1 золото.",
+			ActivationTapsSelf = true,
+			ActivationCondition = ctx => ctx.Battle.IsOnEnemyLineInDiversion(ctx.Source),
+			OnActivated = ctx =>
+			{
+				ctx.Battle.DiscardRandomFromHand(ctx.Battle.OpponentOf(ctx.Player));
+				ctx.Player.AddMana(ManaType.Gold, 1);
+			},
+		},
+		new AbilityData
+		{
+			Id = "ability_seer_rally",
+			Name = "Знамение",
+			Description = "Поворот: скавены и крысы под вашим контролем получают +1 к атаке до конца хода.",
+			ActivationTapsSelf = true,
+			OnActivated = ctx => ctx.Battle.RallySkavens(ctx.Player),
+		},
+		new AbilityData
+		{
+			Id = "ability_seer_rats",
+			Name = "Крысиный выводок",
+			Description = "1 тьма: создайте 2 крыс (1/1/1/0, Зверь) на линии этой карты.",
+			ActivationCost = [new ManaCost(1, ManaType.Darkness)],
+			OnActivated = ctx => ctx.Battle.CreateTokens("rat", 2, ctx.Player, ctx.Source),
+		},
+		Shot("ability_shot_seer", damage: 6, distance: 1, cost: [new ManaCost(2, ManaType.Darkness)],
+			extraCostPerLine: [new ManaCost(1, ManaType.Darkness)]),
+		new AbilityData
+		{
+			Id = "ability_seer_poison",
+			Name = "Варп-яд",
+			Description = "2 тьмы: отравите выбранное существо.",
+			GlossaryTerms = [Glossary.Poison],
+			ActivationCost = [new ManaCost(2, ManaType.Darkness)],
+			ActivationTarget = ActivationTarget.AnyCreature,
+			OnActivated = ctx => ctx.Battle.Poison(ctx.Target),
+		},
+
+		// ───────── Люди веры ─────────
+		new AbilityData
+		{
+			Id = "ability_preacher",
+			Name = "Проповедь",
+			Description = "При розыгрыше получите 1 веру за каждого человека под вашим контролем. "
+				+ "Каждый раз, когда вы разыгрываете человека, получите 1 веру.",
+			OnPlayed = ctx => ctx.Player.AddMana(ManaType.Faith, ctx.Battle.HumansControlledBy(ctx.Player)),
+			OnOwnerPlayedCard = ctx =>
+			{
+				if (ctx.Target.Data.Has(CardTag.Human))
+					ctx.Player.AddMana(ManaType.Faith, 1);
+			},
+		},
+		new AbilityData
+		{
+			Id = "ability_enlightened",
+			Name = "Прозрение",
+			Description = "Когда эта карта потрудится 3 раза: поворот — получите 1 веру.",
+			ActivationTapsSelf = true,
+			ActivationCondition = ctx => ctx.Source.LaborCount >= 3,
+			OnActivated = ctx => ctx.Player.AddMana(ManaType.Faith, 1),
+		},
+		new AbilityData
+		{
+			Id = "ability_diligent",
+			Name = "Усердие",
+			Description = "Когда эта карта потрудится 3 раза, она начнёт давать 2 труда вместо 1.",
+			DoubleLaborAfter = 3,
+		},
+		new AbilityData
+		{
+			Id = "ability_miracle",
+			Name = "Чудо",
+			Description = "1 вера: исцелите существо на 2.",
+			ActivationCost = [new ManaCost(1, ManaType.Faith)],
+			ActivationTarget = ActivationTarget.AnyCreature,
+			OnActivated = ctx => ctx.Battle.Heal(ctx.Target, 2),
+		},
+		new AbilityData
+		{
+			Id = "ability_fanatics",
+			Name = "Рвение",
+			Description = "Если у вас 3 веры в накопителе: +2 к атаке и защите. Если 5 веры: ещё +2 к блоку.",
+			DynamicBonus = card =>
+			{
+				int faith = card.Player?.Mana.GetValueOrDefault(ManaType.Faith) ?? 0;
+				int attackAndDefense = faith >= 3 ? 2 : 0;
+				return new StatBonus(attackAndDefense, attackAndDefense, faith >= 5 ? 2 : 0);
+			},
+		},
+		new AbilityData
+		{
+			Id = "ability_ascetic",
+			Name = "Аскеза",
+			Description = "В фазу трофеев нанесите этой карте 1 урон. Если она от этого погибла, возьмите преимущество из своей колоды.",
+			OnTrophyPhase = ctx =>
+			{
+				ctx.Battle.DealDamage(ctx.Source, 1);
+				if (ctx.Source.IsDead)
+					ctx.Battle.TakeFromDeck(ctx.Player, CardType.Advantage);
+			},
+		},
+		new AbilityData
+		{
+			Id = "ability_elementalist_burn",
+			Name = "Жертвенный огонь",
+			Description = "Поворот: нанесите 2 урона своему существу, затем получите любую элементальную ману.",
+			ActivationTapsSelf = true,
+			ActivationTarget = ActivationTarget.FriendlyCreature,
+			OnActivated = ctx =>
+			{
+				ctx.Battle.DealDamage(ctx.Target, 2, ctx.Source);
+				ctx.Battle.GainChosenElementalMana(ctx.Player);
+			},
+		},
+		new AbilityData
+		{
+			Id = "ability_elementalist_summon",
+			Name = "Призыв стихии",
+			Description = "3 одинаковые элементальные маны: создайте базового элементаля этого типа "
+				+ "(огонь — Огненный, вода — Водный, свет — Воздушный, трава — Земляной).",
+			ActivationCondition = ctx => ctx.Battle.CanSummonElemental(ctx.Player),
+			OnActivated = ctx => ctx.Battle.SummonElemental(ctx.Source, ctx.Player),
+		},
+
 		// По одной способности «дать ману» на каждый основной тип: ability_mana_fire и т.д.
 		.. ManaTypeExtensions.MainTypes.Select(GainMana),
 	];
@@ -367,21 +657,35 @@ public static class AbilitiesData
 	/// Пример: Shot("ability_shot_archer", damage: 3, distance: 2, ammo: 10).
 	/// cost не указан — выстрел бесплатный; ammo не указан — боезапас бесконечный.
 	/// </summary>
-	public static AbilityData Shot(string id, int damage, int distance, ManaCost[] cost = null, int? ammo = null)
+	public static AbilityData Shot(string id, int damage, int distance, ManaCost[] cost = null, int? ammo = null,
+		int selfDamage = 0, ManaCost[] extraCostPerLine = null)
 	{
 		var parts = new List<string> { $"урон {damage}", $"дистанция {distance}" };
 		if (cost is { Length: > 0 })
 			parts.Add("цена " + string.Join(" + ", cost.Select(c => c.ToString())));
 		if (ammo != null)
 			parts.Add($"боезапас {ammo}");
+		if (extraCostPerLine is { Length: > 0 })
+			parts.Add($"дальше — +{string.Join(" + ", extraCostPerLine.Select(c => c.ToString()))} за линию");
+
+		string description = "Нанесите урон вражескому существу в пределах дистанции, не получив урона в ответ.";
+		if (selfDamage > 0)
+			description += $" После выстрела нанесите {selfDamage} урона этой карте.";
 
 		return new AbilityData
 		{
 			Id = id,
 			Name = $"{Glossary.Shot} ({string.Join(", ", parts)})",
-			Description = "Нанесите урон вражескому существу в пределах дистанции, не получив урона в ответ.",
+			Description = description,
 			GlossaryTerms = [Glossary.Shot],
-			Shot = new ShotInfo { Damage = damage, Distance = distance, Ammo = ammo },
+			Shot = new ShotInfo
+			{
+				Damage = damage,
+				Distance = distance,
+				Ammo = ammo,
+				SelfDamage = selfDamage,
+				ExtraCostPerLine = extraCostPerLine ?? [],
+			},
 			ActivationCost = cost ?? [],
 			ActivationTapsSelf = true,
 			ActivationTarget = ActivationTarget.ShotTarget,
